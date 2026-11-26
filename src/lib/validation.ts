@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { cleanLine, cleanText } from "./text";
+import { isAllowedImageUrl } from "./url";
 
 export const LIMITS = {
   name: 120,
@@ -37,7 +38,7 @@ const optionalInt = (max: number) =>
     .nullish()
     .transform((v) => v ?? null);
 
-// https only, no credentials in the URL, no scripts or data: URLs
+// https only, a public host name (no IP literal, localhost or internal name), no credentials, no scripts or data: URLs
 const imageUrl = z
   .string()
   .nullish()
@@ -46,15 +47,7 @@ const imageUrl = z
     z
       .string()
       .max(LIMITS.imageUrl, `legfeljebb ${LIMITS.imageUrl} karakter`)
-      .refine((v) => {
-        if (v === "") return true;
-        try {
-          const u = new URL(v);
-          return u.protocol === "https:" && u.hostname !== "" && u.username === "" && u.password === "";
-        } catch {
-          return false;
-        }
-      }, "csak https:// kép-cím lehet"),
+      .refine((v) => v === "" || isAllowedImageUrl(v), "csak nyilvános https:// kép-cím lehet (IP-cím, localhost és belső név nem)"),
   )
   .transform((v) => (v === "" ? null : v));
 

@@ -27,3 +27,4 @@ Lásd [docs/DEPLOY.md](docs/DEPLOY.md).
 - A belépés ellenőrzése a szerveren történik (időzítés-biztos összevetés), a munkamenet aláírt, `HttpOnly`, `Secure`, `SameSite=Strict` süti.
 - Hibás belépési próbák korlátozva (IP-nként 5 próba 15 percen belül), az írás-útvonalak az `Origin` fejlécet is ellenőrzik.
 - A recepteket a felület sima szövegként rendereli (nincs HTML és markdown).
+- A kép-cím csak nyilvános `https://` cím lehet: IP-cím, `localhost`, belső név (`.local`, `.internal`, egyszavas név) és `felhasználó:jelszó@` nem.

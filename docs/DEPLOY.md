@@ -58,6 +58,17 @@ Három tábla jön létre: `recipe`, `ingredient`, `login_attempt`.
 
 A környezeti változók módosítása csak új deploynál lép életbe. A Vercel projektben: **Deployments**, a legutóbbi mellett **Redeploy**. Ezután minden `main`-re érkező push magától épít.
 
+## Opcionális: külön Preview-adatbázis
+
+Alapból a Preview (a nem `main` ágakról és a pull requestekből épülő) környezet is a Production adatbázisát és titkait használja, így egy kipróbált ág éles adatot írhat. Tisztább, ha a Preview külön adatbázist kap:
+
+1. A Neon dashboardon hozz létre egy második adatbázist vagy egy **branch**et (az ingyenes csomagban is van).
+2. A Vercel projektben, **Settings > Environment Variables**: a `DATABASE_URL` Production értéke maradjon az éles adatbázis, a Preview környezethez add meg a másodikat (a Neon integráció által felvett változót szűkítsd Productionre, és vegyél fel egy külön Preview-os `DATABASE_URL`-t).
+3. Futtasd le a Preview-adatbázison is a migrációt (4. lépés, a `DATABASE_URL` a Preview-adatbázisé legyen).
+4. Preview-ra is érdemes külön `RECIPE_ADMIN_PASSWORD` és `RECIPE_SESSION_SECRET` értéket adni.
+
+Ez a lépés nem kötelező, az oldal nélküle is működik.
+
 ## 6. Ellenőrzés az éles oldalon
 
 1. A főoldal betölt, „Még nincs recept." látszik.
