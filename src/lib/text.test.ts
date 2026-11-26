@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanLine, cleanText, escapeLike, searchKey, searchPattern, slugBase } from "./text";
+import { cleanLine, cleanText, cutChars, escapeLike, searchKey, searchPattern, slugBase } from "./text";
 
 describe("searchKey", () => {
   it("lower-cases and strips Hungarian accents, double acutes included", () => {
@@ -48,6 +48,15 @@ describe("escapeLike", () => {
   });
 });
 
+describe("cutChars", () => {
+  it("cuts by characters and never splits an emoji", () => {
+    expect(cutChars("abcdef", 3)).toBe("abc");
+    expect(cutChars("a\u{1F600}b", 2)).toBe("a\u{1F600}");
+    expect(cutChars("a".repeat(99) + "\u{1F600}b", 100).isWellFormed()).toBe(true);
+    expect("a".repeat(99).concat("\u{1F600}b").slice(0, 100).isWellFormed()).toBe(false); // what plain slice does
+  });
+});
+
 describe("searchPattern", () => {
   it("builds an accent-free, escaped LIKE pattern, so wildcards in the search are literal", () => {
     expect(searchPattern("Pörkölt")).toBe("%porkolt%");
@@ -58,6 +67,11 @@ describe("searchPattern", () => {
     expect(pattern.isWellFormed()).toBe(true);
     expect(pattern).toBe(`%${"a".repeat(99)}\u{1F600}%`);
     expect(searchPattern("a".repeat(100) + "\u{1F600}", 100)).toBe(`%${"a".repeat(100)}%`);
+  });
+  it("stays well formed through the page-shaped flow (cut the text first, build the pattern after)", () => {
+    const q = cutChars("a".repeat(99) + "\u{1F600}b", 100);
+    expect(q.isWellFormed()).toBe(true);
+    expect((searchPattern(q, 100) as string).isWellFormed()).toBe(true);
   });
   it("is null for an empty search and cuts a very long one", () => {
     expect(searchPattern("   ")).toBeNull();

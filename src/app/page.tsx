@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Header } from "@/components/Header";
 import { listRecipes, PAGE_SIZE } from "@/lib/queries";
+import { cutChars } from "@/lib/text";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v
 
 export default async function Home({ searchParams }: Props) {
   const sp = await searchParams;
-  const q = first(sp.q).slice(0, 100);
+  const q = cutChars(first(sp.q), 100);
   const page = Math.min(Math.max(Math.floor(Number(first(sp.page))) || 1, 1), 10_000);
   const { items, total } = await listRecipes(q, page);
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));

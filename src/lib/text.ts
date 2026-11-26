@@ -49,9 +49,13 @@ export function escapeLike(input: string): string {
   return input.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
+/** At most `max` characters (code points, not UTF-16 units: `slice` can split an emoji and leave a lone surrogate). */
+export function cutChars(text: string, max: number): string {
+  return Array.from(text).slice(0, max).join("");
+}
+
 /** The LIKE pattern for a search text (at most `max` characters), or null when there is nothing to search for. */
 export function searchPattern(q: string, max = 100): string | null {
-  // cut by code points: q.slice(0, max) counts UTF-16 units and can split an emoji, leaving a lone surrogate
-  const key = searchKey(Array.from(q).slice(0, max).join(""));
+  const key = searchKey(cutChars(q, max));
   return key ? `%${escapeLike(key)}%` : null;
 }
