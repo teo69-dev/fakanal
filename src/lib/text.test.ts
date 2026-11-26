@@ -53,6 +53,12 @@ describe("searchPattern", () => {
     expect(searchPattern("Pörkölt")).toBe("%porkolt%");
     expect(searchPattern("100%_x")).toBe("%100\\%\\_x%");
   });
+  it("cuts by characters, so an emoji at the cut is dropped whole instead of leaving half of it", () => {
+    const pattern = searchPattern("a".repeat(99) + "\u{1F600}b", 100) as string;
+    expect(pattern.isWellFormed()).toBe(true);
+    expect(pattern).toBe(`%${"a".repeat(99)}\u{1F600}%`);
+    expect(searchPattern("a".repeat(100) + "\u{1F600}", 100)).toBe(`%${"a".repeat(100)}%`);
+  });
   it("is null for an empty search and cuts a very long one", () => {
     expect(searchPattern("   ")).toBeNull();
     expect(searchPattern("a".repeat(500))).toBe(`%${"a".repeat(100)}%`);

@@ -51,6 +51,7 @@ export function escapeLike(input: string): string {
 
 /** The LIKE pattern for a search text (at most `max` characters), or null when there is nothing to search for. */
 export function searchPattern(q: string, max = 100): string | null {
-  const key = searchKey(q.slice(0, max));
+  // cut by code points: q.slice(0, max) counts UTF-16 units and can split an emoji, leaving a lone surrogate
+  const key = searchKey(Array.from(q).slice(0, max).join(""));
   return key ? `%${escapeLike(key)}%` : null;
 }

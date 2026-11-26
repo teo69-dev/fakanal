@@ -91,7 +91,7 @@ Ez a lépés nem kötelező, az oldal nélküle is működik.
 | a főoldal vagy a mentés 500-at ad | hiányzik a `DATABASE_URL`, vagy a migráció (4. lépés) nem futott le |
 | a belépés 429-et ad | 15 percen belül 5 hibás jelszópróba érkezett ugyanarról a címről; 15 perc múlva magától oldódik |
 | a Vercel nem engedi a deployt a commit szerzője miatt | a commit szerzője a `teo69-dev` GitHub-fiók (noreply) címe legyen |
-| mentéskor 429 | egy óra alatt legfeljebb 30 recept vehető fel |
+| mentéskor 429 | egy óra alatt kb. 30 recept vehető fel (egy megszakadt kérés miatt ritkán 1-2 többlet előfordulhat) |
 
 ## Ismert kockázat
 

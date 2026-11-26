@@ -14,6 +14,12 @@ export const WRITE_MAX_PER_WINDOW = 30;
  *   - the j-th request to pass saw at least j rows (the rows of the earlier passers stay), so at most MAX can pass;
  *   - a request that does not fit removes its own row again, so a refused attempt neither extends the lock nor counts.
  * The counters live in the database because serverless instances share no memory.
+ *
+ * This only works while EVERY Store call stays a separate, immediately committed statement (the neon-http driver
+ * behaves that way). Do not wrap enterLogin or confirmWrite in a database transaction: the rows written inside it
+ * would stay invisible to the other requests until it ends, and the limits could be bypassed again.
+ * A request that is cut off (serverless timeout) between its insert and its check leaves its row behind: for the login
+ * that counts as a failed guess (expires after the window), for a recipe the limit may be exceeded by that one.
  */
 
 export type LoginGate =

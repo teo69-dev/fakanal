@@ -16,7 +16,11 @@ export type NewRecipe = {
 
 export type NewIngredient = { position: number; amount: string | null; name: string };
 
-/** Everything the write routes need from the database, behind one interface so the routes can be tested without one. */
+/**
+ * Everything the write routes need from the database, behind one interface so the routes can be tested without one.
+ * Every method is ONE statement that commits at once; the rate limits in ratelimit.ts rely on that (no transactions
+ * around several calls).
+ */
 export type Store = {
   purgeAttempts(before: Date): Promise<void>;
   addAttempt(ipHash: string, id: string): Promise<void>;
