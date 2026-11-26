@@ -1,5 +1,5 @@
 {
-  "id": "3080cfb2-625c-470d-a8b3-d43c3aedc8d9",
+  "id": "45f31d87-0d40-45e8-8d45-78b1b7ffaa4c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -66,6 +66,13 @@
       "name": "login_attempt",
       "schema": "",
       "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
         "ip_hash": {
           "name": "ip_hash",
           "type": "text",

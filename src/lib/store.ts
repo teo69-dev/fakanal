@@ -19,10 +19,12 @@ export type NewIngredient = { position: number; amount: string | null; name: str
 /** Everything the write routes need from the database, behind one interface so the routes can be tested without one. */
 export type Store = {
   purgeAttempts(before: Date): Promise<void>;
+  addAttempt(ipHash: string, id: string): Promise<void>;
+  deleteAttempt(id: string): Promise<void>;
   recentAttempts(ipHash: string, since: Date): Promise<{ count: number; oldest: Date | null }>;
-  addAttempt(ipHash: string): Promise<void>;
   countRecipesSince(since: Date): Promise<number>;
   insertRecipe(row: NewRecipe, ingredients: NewIngredient[]): Promise<void>;
+  deleteRecipe(id: string): Promise<void>;
 };
 
 export function getStore(): Store {
@@ -31,6 +33,12 @@ export function getStore(): Store {
     async purgeAttempts(before) {
       await db.delete(loginAttempt).where(lt(loginAttempt.attemptedAt, before));
     },
+    async addAttempt(ipHash, id) {
+      await db.insert(loginAttempt).values({ id, ipHash });
+    },
+    async deleteAttempt(id) {
+      await db.delete(loginAttempt).where(eq(loginAttempt.id, id));
+    },
     async recentAttempts(ipHash, since) {
       const rows = await db
         .select({ at: loginAttempt.attemptedAt })
@@ -38,9 +46,6 @@ export function getStore(): Store {
         .where(and(eq(loginAttempt.ipHash, ipHash), gte(loginAttempt.attemptedAt, since)))
         .orderBy(asc(loginAttempt.attemptedAt));
       return { count: rows.length, oldest: rows[0]?.at ?? null };
-    },
-    async addAttempt(ipHash) {
-      await db.insert(loginAttempt).values({ ipHash });
     },
     async countRecipesSince(since) {
       const [row] = await db.select({ n: count() }).from(recipe).where(gte(recipe.createdAt, since));
@@ -52,6 +57,10 @@ export function getStore(): Store {
         db.insert(recipe).values(row),
         db.insert(ingredient).values(ingredients.map((i) => ({ ...i, recipeId: row.id }))),
       ]);
+    },
+    async deleteRecipe(id) {
+      // the ingredients go with it (ON DELETE CASCADE)
+      await db.delete(recipe).where(eq(recipe.id, id));
     },
   };
 }

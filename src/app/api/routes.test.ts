@@ -1,39 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SESSION_COOKIE, signSession } from "@/lib/auth";
+import { newFakeState } from "@/test/fake-store";
 
-// An in-memory stand-in for the database; the routes only see the Store interface.
-const db = vi.hoisted(() => ({
-  attempts: [] as { ip: string; at: Date }[],
-  recipes: [] as { row: Record<string, unknown>; ingredients: Record<string, unknown>[] }[],
-  recipeTimes: [] as Date[],
-  uniqueViolations: 0,
-}));
+// An in-memory stand-in for the database (src/test/fake-store.ts); the routes only see the Store interface.
+const db = vi.hoisted(() => ({ state: undefined as unknown as import("@/test/fake-store").FakeState }));
 
-vi.mock("@/lib/store", () => ({
-  isUniqueViolation: (e: unknown) => (e as { code?: string } | null)?.code === "23505",
-  getStore: () => ({
-    async purgeAttempts(before: Date) {
-      db.attempts = db.attempts.filter((a) => a.at >= before);
-    },
-    async recentAttempts(ipHash: string, since: Date) {
-      const mine = db.attempts.filter((a) => a.ip === ipHash && a.at >= since).sort((a, b) => a.at.getTime() - b.at.getTime());
-      return { count: mine.length, oldest: mine[0]?.at ?? null };
-    },
-    async addAttempt(ipHash: string) {
-      db.attempts.push({ ip: ipHash, at: new Date() });
-    },
-    async countRecipesSince(since: Date) {
-      return db.recipeTimes.filter((t) => t >= since).length;
-    },
-    async insertRecipe(row: Record<string, unknown>, ingredients: Record<string, unknown>[]) {
-      if (db.uniqueViolations > 0) {
-        db.uniqueViolations--;
-        throw Object.assign(new Error("duplicate key"), { code: "23505" });
-      }
-      db.recipes.push({ row, ingredients });
-    },
-  }),
-}));
+vi.mock("@/lib/store", async () => {
+  const { createFakeStore } = await import("@/test/fake-store");
+  return {
+    isUniqueViolation: (e: unknown) => (e as { code?: string } | null)?.code === "23505",
+    getStore: () => createFakeStore(db.state),
+  };
+});
 
 const revalidatePath = vi.hoisted(() => vi.fn());
 vi.mock("next/cache", () => ({ revalidatePath }));
@@ -72,10 +50,7 @@ const recipe = {
 };
 
 beforeEach(() => {
-  db.attempts = [];
-  db.recipes = [];
-  db.recipeTimes = [];
-  db.uniqueViolations = 0;
+  db.state = newFakeState();
   revalidatePath.mockClear();
   vi.stubEnv("RECIPE_ADMIN_PASSWORD", PASSWORD);
   vi.stubEnv("RECIPE_SESSION_SECRET", SECRET);
@@ -121,10 +96,10 @@ describe("POST /api/login", () => {
     const res = await login(req("/api/login", { body: { password: "nope" } }));
     expect(res.status).toBe(401);
     expect(res.headers.get("set-cookie")).toBeNull();
-    expect(db.attempts).toHaveLength(1);
-    expect(db.attempts[0]?.ip).not.toContain("203.0.113.7");
+    expect(db.state.attempts).toHaveLength(1);
+    expect(db.state.attempts[0]?.ip).not.toContain("203.0.113.7");
     await login(req("/api/login", { body: { password: PASSWORD } }));
-    expect(db.attempts).toHaveLength(1);
+    expect(db.state.attempts).toHaveLength(1);
   });
 
   it("answers 429 with Retry-After from the 6th attempt on, even with the right password", async () => {
@@ -133,10 +108,26 @@ describe("POST /api/login", () => {
     }
     const sixth = await login(req("/api/login", { body: { password: "wrong-6" } }));
     expect(sixth.status).toBe(429);
+    expect(db.state.attempts).toHaveLength(5); // the refused attempt took its own row back
     expect(Number(sixth.headers.get("retry-after"))).toBeGreaterThan(0);
     const correct = await login(req("/api/login", { body: { password: PASSWORD } }));
     expect(correct.status).toBe(429);
     expect(correct.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("holds under simultaneous guesses: 40 wrong passwords at once, at most 5 are compared, the rest get 429", async () => {
+    db.state.delayMs = 8;
+    const results = await Promise.all(Array.from({ length: 40 }, (_, i) => login(req("/api/login", { body: { password: `wrong-${i}` } }))));
+    const statuses = results.map((r) => r.status);
+    expect(statuses.every((c) => c === 401 || c === 429)).toBe(true);
+    expect(statuses.filter((c) => c === 401).length).toBeLessThanOrEqual(5);
+    expect(db.state.attempts.length).toBeLessThanOrEqual(5);
+  });
+
+  it("a correct password takes only its own row back, so a visitor who gets in does not lose the recorded failures", async () => {
+    await login(req("/api/login", { body: { password: "wrong" } }));
+    await login(req("/api/login", { body: { password: PASSWORD } }));
+    expect(db.state.attempts).toHaveLength(1);
   });
 
   it("limits per address: another client is not locked out", async () => {
@@ -147,7 +138,7 @@ describe("POST /api/login", () => {
   it("answers 403 without an Origin or with a foreign one", async () => {
     expect((await login(req("/api/login", { body: { password: PASSWORD }, origin: null }))).status).toBe(403);
     expect((await login(req("/api/login", { body: { password: PASSWORD }, origin: "https://evil.example" }))).status).toBe(403);
-    expect(db.attempts).toHaveLength(0);
+    expect(db.state.attempts).toHaveLength(0);
   });
 
   it("answers 400, 413 and 415 for bad bodies", async () => {
@@ -177,7 +168,7 @@ describe("POST /api/recipes", () => {
     expect((await createRecipe(req("/api/recipes", { ...body, cookie: `${SESSION_COOKIE}=garbage` }))).status).toBe(401);
     expect((await createRecipe(req("/api/recipes", { ...body, cookie: session(Date.now() - 1) }))).status).toBe(401);
     expect((await createRecipe(req("/api/recipes", { ...body, cookie: session(undefined, "another-secret-another-secret-another-0") }))).status).toBe(401);
-    expect(db.recipes).toHaveLength(0);
+    expect(db.state.recipes).toHaveLength(0);
   });
 
   it("answers 503 when the session secret is not configured", async () => {
@@ -190,7 +181,7 @@ describe("POST /api/recipes", () => {
     expect((await createRecipe(req("/api/recipes", { body: recipe, cookie: c, origin: "https://evil.example" }))).status).toBe(403);
     expect((await createRecipe(req("/api/recipes", { body: recipe, cookie: c, origin: null }))).status).toBe(403);
     expect((await createRecipe(req("/api/recipes", { body: recipe, cookie: c, origin: `https://${HOST}.evil.example` }))).status).toBe(403);
-    expect(db.recipes).toHaveLength(0);
+    expect(db.state.recipes).toHaveLength(0);
   });
 
   it("answers 413 for a body over 64 KB, with or without a declared length", async () => {
@@ -199,7 +190,7 @@ describe("POST /api/recipes", () => {
     const raw = JSON.stringify(big);
     const declared = await createRecipe(req("/api/recipes", { raw, cookie: session(), headers: { "content-length": String(raw.length) } }));
     expect(declared.status).toBe(413);
-    expect(db.recipes).toHaveLength(0);
+    expect(db.state.recipes).toHaveLength(0);
   });
 
   it("answers 415 and 400 for a non-JSON type and for broken JSON", async () => {
@@ -212,7 +203,7 @@ describe("POST /api/recipes", () => {
     expect(res.status).toBe(400);
     const { issues } = (await res.json()) as { issues: { field: string }[] };
     expect(issues.map((i) => i.field)).toEqual(expect.arrayContaining(["imageUrl", "ingredients"]));
-    expect(db.recipes).toHaveLength(0);
+    expect(db.state.recipes).toHaveLength(0);
   });
 
   it("answers 201 with a slug, stores the cleaned data and refreshes the list", async () => {
@@ -220,23 +211,42 @@ describe("POST /api/recipes", () => {
     expect(res.status).toBe(201);
     const { slug } = (await res.json()) as { slug: string };
     expect(slug).toMatch(/^toltott-kaposzta-[0-9a-f]{6}$/);
-    expect(db.recipes).toHaveLength(1);
-    expect(db.recipes[0]?.row).toMatchObject({ slug, name: "Töltött Káposzta", nameSearch: "toltott kaposzta", servings: 4 });
-    expect(db.recipes[0]?.ingredients).toEqual([{ position: 0, amount: "500 g", name: "marhahús" }]);
+    expect(db.state.recipes).toHaveLength(1);
+    expect(db.state.recipes[0]?.row).toMatchObject({ slug, name: "Töltött Káposzta", nameSearch: "toltott kaposzta", servings: 4 });
+    expect(db.state.recipes[0]?.ingredients).toEqual([{ position: 0, amount: "500 g", name: "marhahús" }]);
     expect(revalidatePath).toHaveBeenCalledWith("/");
   });
 
   it("answers 429 when 30 recipes were added within the hour", async () => {
-    db.recipeTimes = Array.from({ length: 30 }, () => new Date());
+    db.state.recipes = Array.from({ length: 30 }, () => ({ row: { id: crypto.randomUUID() }, ingredients: [], at: new Date() }));
     const res = await createRecipe(req("/api/recipes", { body: recipe, cookie: session() }));
     expect(res.status).toBe(429);
-    expect(db.recipes).toHaveLength(0);
+    expect(db.state.recipes).toHaveLength(30);
+    expect(db.state.insertCalls).toBe(0); // refused early, nothing was even written
+  });
+
+  it("holds under simultaneous saves: 80 at once, at most 30 recipes survive and the rest get 429", async () => {
+    db.state.delayMs = 8;
+    const c = session();
+    const results = await Promise.all(
+      Array.from({ length: 80 }, (_, i) => createRecipe(req("/api/recipes", { body: { ...recipe, name: `Recept ${i}` }, cookie: c }))),
+    );
+    const statuses = results.map((r) => r.status);
+    expect(statuses.every((code) => code === 201 || code === 429)).toBe(true);
+    expect(statuses.filter((code) => code === 201).length).toBeLessThanOrEqual(30);
+    expect(db.state.recipes.length).toBeLessThanOrEqual(30);
+  });
+
+  it("does not refresh the list for a recipe that was refused", async () => {
+    db.state.recipes = Array.from({ length: 30 }, () => ({ row: { id: crypto.randomUUID() }, ingredients: [], at: new Date() }));
+    await createRecipe(req("/api/recipes", { body: recipe, cookie: session() }));
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it("retries with a new slug after a unique violation, and gives up with 409", async () => {
-    db.uniqueViolations = 2;
+    db.state.uniqueViolations = 2;
     expect((await createRecipe(req("/api/recipes", { body: recipe, cookie: session() }))).status).toBe(201);
-    db.uniqueViolations = 3;
+    db.state.uniqueViolations = 3;
     expect((await createRecipe(req("/api/recipes", { body: recipe, cookie: session() }))).status).toBe(409);
   });
 });

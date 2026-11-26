@@ -35,10 +35,13 @@ export const ingredient = pgTable("ingredient", {
   name: text("name").notNull(),
 });
 
-// One row per FAILED login attempt; ip_hash is a salted hash, never the raw address.
+// One row per login attempt that was let through to the password check and has not succeeded (so: per failed guess);
+// ip_hash is a salted hash, never the raw address. The row is written BEFORE the password is compared (see
+// src/lib/ratelimit.ts), and the id lets a successful attempt remove just its own row.
 export const loginAttempt = pgTable(
   "login_attempt",
   {
+    id: uuid("id").primaryKey().defaultRandom(),
     ipHash: text("ip_hash").notNull(),
     attemptedAt: timestamp("attempted_at", { withTimezone: true }).notNull().defaultNow(),
   },

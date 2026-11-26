@@ -1,7 +1,7 @@
 import { asc, count, desc, eq, like } from "drizzle-orm";
 import { getDb } from "@/db";
 import { ingredient, recipe } from "@/db/schema";
-import { escapeLike, searchKey } from "./text";
+import { searchPattern } from "./text";
 
 export const PAGE_SIZE = 24;
 export const MAX_QUERY_LENGTH = 100;
@@ -17,8 +17,8 @@ export type RecipeListItem = {
 
 export async function listRecipes(q: string, page: number): Promise<{ items: RecipeListItem[]; total: number }> {
   const db = getDb();
-  const key = searchKey(q.slice(0, MAX_QUERY_LENGTH));
-  const where = key ? like(recipe.nameSearch, `%${escapeLike(key)}%`) : undefined;
+  const pattern = searchPattern(q, MAX_QUERY_LENGTH);
+  const where = pattern ? like(recipe.nameSearch, pattern) : undefined;
   const [items, totals] = await Promise.all([
     db
       .select({

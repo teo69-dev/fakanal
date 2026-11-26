@@ -1,63 +1,107 @@
 import { describe, expect, it } from "vitest";
-import { checkLoginLimit, checkWriteLimit, LOGIN_MAX_FAILED, LOGIN_WINDOW_MS, WRITE_MAX_PER_WINDOW } from "./ratelimit";
-import type { Store } from "./store";
-
-function fakeStore(attempts: { ip: string; at: Date }[] = [], recipeTimes: Date[] = []) {
-  const store: Store = {
-    async purgeAttempts(before) {
-      for (let i = attempts.length - 1; i >= 0; i--) if ((attempts[i] as { at: Date }).at < before) attempts.splice(i, 1);
-    },
-    async recentAttempts(ipHash, since) {
-      const mine = attempts.filter((a) => a.ip === ipHash && a.at >= since).sort((a, b) => a.at.getTime() - b.at.getTime());
-      return { count: mine.length, oldest: mine[0]?.at ?? null };
-    },
-    async addAttempt(ipHash) {
-      attempts.push({ ip: ipHash, at: new Date() });
-    },
-    async countRecipesSince(since) {
-      return recipeTimes.filter((t) => t >= since).length;
-    },
-    async insertRecipe() {},
-  };
-  return { store, attempts };
-}
+import { createFakeStore, newFakeState } from "@/test/fake-store";
+import { checkWriteLimit, confirmWrite, enterLogin, LOGIN_MAX_FAILED, LOGIN_WINDOW_MS, WRITE_MAX_PER_WINDOW } from "./ratelimit";
 
 const NOW = new Date("2026-11-26T12:00:00Z");
 const ago = (ms: number) => new Date(NOW.getTime() - ms);
+const attempt = (ip: string, at: Date) => ({ id: crypto.randomUUID(), ip, at });
+const fixed = () => {
+  const s = newFakeState();
+  s.now = () => NOW;
+  return s;
+};
+const recipeAt = (at: Date) => ({ row: { id: crypto.randomUUID() }, ingredients: [], at });
 
-describe("checkLoginLimit", () => {
-  it("allows up to 5 failures and blocks from the next attempt", async () => {
-    for (let n = 0; n < LOGIN_MAX_FAILED; n++) {
-      const { store } = fakeStore(Array.from({ length: n }, () => ({ ip: "h", at: ago(1000) })));
-      expect((await checkLoginLimit(store, "h", NOW)).limited, `after ${n} failures`).toBe(false);
+describe("enterLogin", () => {
+  it("lets the first 5 attempts through (each is recorded as a failure) and refuses the 6th", async () => {
+    const s = fixed();
+    const store = createFakeStore(s);
+    for (let n = 1; n <= LOGIN_MAX_FAILED; n++) {
+      const gate = await enterLogin(store, "h", NOW);
+      expect(gate.allowed, `attempt ${n}`).toBe(true);
     }
-    const { store } = fakeStore(Array.from({ length: LOGIN_MAX_FAILED }, () => ({ ip: "h", at: ago(1000) })));
-    expect((await checkLoginLimit(store, "h", NOW)).limited).toBe(true);
+    expect(s.attempts).toHaveLength(LOGIN_MAX_FAILED);
+    const sixth = await enterLogin(store, "h", NOW);
+    expect(sixth.allowed).toBe(false);
+    // a refused attempt takes its own row back: it does not count and does not extend the lock
+    expect(s.attempts).toHaveLength(LOGIN_MAX_FAILED);
+  });
+
+  it("release() (a correct password) removes just that attempt's row", async () => {
+    const s = fixed();
+    const store = createFakeStore(s);
+    await enterLogin(store, "h", NOW);
+    const gate = await enterLogin(store, "h", NOW);
+    expect(s.attempts).toHaveLength(2);
+    if (gate.allowed) await gate.release();
+    expect(s.attempts).toHaveLength(1);
   });
 
   it("reports when the oldest failure leaves the window", async () => {
-    const { store } = fakeStore([
-      { ip: "h", at: ago(10 * 60 * 1000) },
-      ...Array.from({ length: 4 }, () => ({ ip: "h", at: ago(1000) })),
-    ]);
-    const r = await checkLoginLimit(store, "h", NOW);
-    expect(r).toEqual({ limited: true, retryAfterSeconds: 5 * 60 });
+    const s = fixed();
+    s.attempts = [attempt("h", ago(10 * 60 * 1000)), ...Array.from({ length: 4 }, () => attempt("h", ago(1000)))];
+    const gate = await enterLogin(createFakeStore(s), "h", NOW);
+    // 4 + the old one = 5 rows -> this attempt is the 6th and is refused; the old row frees in 5 minutes
+    expect(gate).toEqual({ allowed: false, retryAfterSeconds: 5 * 60 });
   });
 
   it("does not count other addresses or failures older than the window, and deletes the old rows", async () => {
-    const old = Array.from({ length: 10 }, () => ({ ip: "h", at: ago(LOGIN_WINDOW_MS + 1000) }));
-    const other = Array.from({ length: 10 }, () => ({ ip: "other", at: ago(1000) }));
-    const { store, attempts } = fakeStore([...old, ...other]);
-    expect((await checkLoginLimit(store, "h", NOW)).limited).toBe(false);
-    expect(attempts.every((a) => a.at >= ago(LOGIN_WINDOW_MS))).toBe(true);
+    const s = fixed();
+    s.attempts = [
+      ...Array.from({ length: 10 }, () => attempt("h", ago(LOGIN_WINDOW_MS + 1000))),
+      ...Array.from({ length: 10 }, () => attempt("other", ago(1000))),
+    ];
+    expect((await enterLogin(createFakeStore(s), "h", NOW)).allowed).toBe(true);
+    expect(s.attempts.every((a) => a.at >= ago(LOGIN_WINDOW_MS))).toBe(true);
+  });
+
+  it("holds under simultaneous attempts: 40 at once, at most 5 get to compare a password", async () => {
+    const s = newFakeState();
+    s.delayMs = 8;
+    const store = createFakeStore(s);
+    const gates = await Promise.all(Array.from({ length: 40 }, () => enterLogin(store, "h")));
+    const allowed = gates.filter((g) => g.allowed).length;
+    expect(allowed).toBeLessThanOrEqual(LOGIN_MAX_FAILED);
+    expect(s.attempts.length).toBeLessThanOrEqual(LOGIN_MAX_FAILED);
   });
 });
 
-describe("checkWriteLimit", () => {
-  it("allows 30 recipes per hour in total and blocks the 31st", async () => {
-    const times = (n: number) => Array.from({ length: n }, () => ago(60_000));
-    expect(await checkWriteLimit(fakeStore([], times(WRITE_MAX_PER_WINDOW - 1)).store, NOW)).toBe(true);
-    expect(await checkWriteLimit(fakeStore([], times(WRITE_MAX_PER_WINDOW)).store, NOW)).toBe(false);
-    expect(await checkWriteLimit(fakeStore([], Array.from({ length: 99 }, () => ago(2 * 3600 * 1000))).store, NOW)).toBe(true);
+describe("write limit", () => {
+  it("checkWriteLimit: the early check allows 29 and refuses 30 within the hour", async () => {
+    const make = (n: number, at: Date) => {
+      const s = newFakeState();
+      s.recipes = Array.from({ length: n }, () => recipeAt(at));
+      return createFakeStore(s);
+    };
+    expect(await checkWriteLimit(make(WRITE_MAX_PER_WINDOW - 1, ago(60_000)), NOW)).toBe(true);
+    expect(await checkWriteLimit(make(WRITE_MAX_PER_WINDOW, ago(60_000)), NOW)).toBe(false);
+    expect(await checkWriteLimit(make(99, ago(2 * 3600 * 1000)), NOW)).toBe(true);
+  });
+
+  it("confirmWrite keeps the 30th recipe and deletes the 31st", async () => {
+    const s = fixed();
+    s.recipes = Array.from({ length: WRITE_MAX_PER_WINDOW }, () => recipeAt(ago(60_000)));
+    const store = createFakeStore(s);
+    expect(await confirmWrite(store, s.recipes[0]!.row.id, NOW)).toBe(true);
+    s.recipes.push(recipeAt(ago(1)));
+    const extra = s.recipes[s.recipes.length - 1]!.row.id;
+    expect(await confirmWrite(store, extra, NOW)).toBe(false);
+    expect(s.recipes.some((r) => r.row.id === extra)).toBe(false);
+    expect(s.recipes).toHaveLength(WRITE_MAX_PER_WINDOW);
+  });
+
+  it("holds under simultaneous writes: 80 at once, at most 30 recipes survive", async () => {
+    const s = newFakeState();
+    s.delayMs = 8;
+    const store = createFakeStore(s);
+    const results = await Promise.all(
+      Array.from({ length: 80 }, async () => {
+        const id = crypto.randomUUID();
+        await store.insertRecipe({ id } as never, []);
+        return confirmWrite(store, id);
+      }),
+    );
+    expect(results.filter(Boolean).length).toBeLessThanOrEqual(WRITE_MAX_PER_WINDOW);
+    expect(s.recipes.length).toBeLessThanOrEqual(WRITE_MAX_PER_WINDOW);
   });
 });

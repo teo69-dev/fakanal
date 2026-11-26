@@ -89,7 +89,7 @@ describe("recipeInputSchema", () => {
   });
 
   it("strips control characters and keeps HTML as plain text (the page escapes it on render)", () => {
-    const r = recipeInputSchema.parse({ ...valid, name: "Le\u0000ves‮", description: "<script>alert(1)</script>" });
+    const r = recipeInputSchema.parse({ ...valid, name: "Le\u0000ves\u202E", description: "<script>alert(1)</script>" });
     expect(r.name).toBe("Leves");
     expect(r.description).toBe("<script>alert(1)</script>");
   });

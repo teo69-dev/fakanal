@@ -7,6 +7,7 @@ CREATE TABLE "ingredient" (
 );
 --> statement-breakpoint
 CREATE TABLE "login_attempt" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"ip_hash" text NOT NULL,
 	"attempted_at" timestamp with time zone DEFAULT now() NOT NULL
 );

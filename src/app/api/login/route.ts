@@ -1,7 +1,7 @@
 import { passwordMatches, SESSION_TTL_SECONDS, sessionCookieHeader, signSession } from "@/lib/auth";
 import { adminPassword, ipSalt, sessionSecret } from "@/lib/env";
 import { clientIp, empty, hashIp, json, readJsonBody, sameOrigin } from "@/lib/http";
-import { checkLoginLimit } from "@/lib/ratelimit";
+import { enterLogin } from "@/lib/ratelimit";
 import { getStore } from "@/lib/store";
 import { loginSchema } from "@/lib/validation";
 
@@ -24,15 +24,16 @@ export async function POST(request: Request): Promise<Response> {
   const store = getStore();
   const ipHash = hashIp(clientIp(request), salt);
 
-  const limit = await checkLoginLimit(store, ipHash);
-  if (limit.limited) {
-    return json({ error: "too_many_attempts" }, 429, { "retry-after": String(limit.retryAfterSeconds) });
+  // The attempt is reserved (counted) BEFORE the password is compared, so simultaneous guesses cannot slip past the limit.
+  const gate = await enterLogin(store, ipHash);
+  if (!gate.allowed) {
+    return json({ error: "too_many_attempts" }, 429, { "retry-after": String(gate.retryAfterSeconds) });
   }
 
   if (!passwordMatches(parsed.data.password, password)) {
-    await store.addAttempt(ipHash);
-    return json({ error: "wrong_password" }, 401);
+    return json({ error: "wrong_password" }, 401); // the reserved row stays: it is the recorded failure
   }
+  await gate.release();
 
   const token = signSession(Date.now() + SESSION_TTL_SECONDS * 1000, secret);
   return empty(204, {

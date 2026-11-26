@@ -54,10 +54,14 @@ export async function readJsonBody(request: Request, limit = MAX_BODY_BYTES): Pr
   }
 }
 
-/** Vercel overwrites X-Forwarded-For with the client address and does not forward external values (Vercel docs). */
+/**
+ * Client address. Vercel overwrites X-Forwarded-For with the client address and does not forward external values; its
+ * docs describe x-vercel-forwarded-for as the same value that also stays right behind a proxy placed in front of
+ * Vercel, so that one comes first. Without any of them (e.g. a local `next start`) everybody shares one bucket.
+ */
 export function clientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || request.headers.get("x-real-ip")?.trim() || "unknown";
+  const first = (name: string) => request.headers.get(name)?.split(",")[0]?.trim();
+  return first("x-vercel-forwarded-for") || first("x-forwarded-for") || first("x-real-ip") || "unknown";
 }
 
 export function hashIp(ip: string, salt: string): string {

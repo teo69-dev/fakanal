@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { checkRequestSession } from "@/lib/guard";
 import { json, readJsonBody, sameOrigin } from "@/lib/http";
-import { checkWriteLimit } from "@/lib/ratelimit";
+import { checkWriteLimit, confirmWrite } from "@/lib/ratelimit";
 import { getStore, isUniqueViolation } from "@/lib/store";
 import { searchKey, slugBase } from "@/lib/text";
 import { recipeInputSchema } from "@/lib/validation";
@@ -30,12 +30,13 @@ export async function POST(request: Request): Promise<Response> {
   if (!(await checkWriteLimit(store))) return json({ error: "too_many_recipes" }, 429, { "retry-after": "3600" });
 
   // The suffix makes slugs unique without a lookup; a collision (the unique constraint) just draws another suffix.
+  const id = randomUUID();
   for (let attempt = 0; attempt < 3; attempt++) {
     const slug = `${slugBase(input.name)}-${randomBytes(3).toString("hex")}`;
     try {
       await store.insertRecipe(
         {
-          id: randomUUID(),
+          id,
           slug,
           name: input.name,
           nameSearch: searchKey(input.name),
@@ -51,6 +52,8 @@ export async function POST(request: Request): Promise<Response> {
       if (isUniqueViolation(error)) continue;
       throw error;
     }
+    // the authoritative write limit: counted AFTER the insert, so simultaneous requests cannot all slip past the early check
+    if (!(await confirmWrite(store, id))) return json({ error: "too_many_recipes" }, 429, { "retry-after": "3600" });
     revalidatePath("/");
     return json({ slug }, 201);
   }
