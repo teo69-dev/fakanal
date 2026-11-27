@@ -245,70 +245,35 @@ button:disabled {
   color: var(--muted);
 }
 
-/* A recipe without a picture: a warm gradient tile with the first letter of its name. Six palettes, chosen from the
-   recipe's address; every letter has at least 3:1 contrast on both ends of its gradient (checked), in light and dark. */
+/* A recipe without a picture: a pale neutral tile with a camera icon, in the same box as a picture. The icon has at
+   least 3:1 contrast on the tile in both schemes (checked in the tests). */
 .ph {
-  --ph-a: #b8482a;
-  --ph-b: #cf6a34;
-  --ph-ink: #fff6ee;
-  position: relative;
+  --ph-bg: #efe9df;
+  --ph-ink: #857867;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
   aspect-ratio: 16 / 10; /* the same box as a picture: the grid does not jump */
-  overflow: hidden;
-  background: linear-gradient(135deg, var(--ph-a), var(--ph-b));
+  background: var(--ph-bg);
   color: var(--ph-ink);
 }
 
-.ph-0 { --ph-a: #b8482a; --ph-b: #cf6a34; --ph-ink: #fff6ee; }
-.ph-1 { --ph-a: #d9a02a; --ph-b: #efc866; --ph-ink: #3d2406; }
-.ph-2 { --ph-a: #8a9a45; --ph-b: #b4c36a; --ph-ink: #20290c; }
-.ph-3 { --ph-a: #a63229; --ph-b: #d4573f; --ph-ink: #fff4ee; }
-.ph-4 { --ph-a: #7a3b5a; --ph-b: #b0607f; --ph-ink: #fff2f6; }
-.ph-5 { --ph-a: #6f8f7a; --ph-b: #9bb8a0; --ph-ink: #12261a; }
-
 @media (prefers-color-scheme: dark) {
-  .ph-0 { --ph-a: #4d2314; --ph-b: #7a4022; --ph-ink: #ffd9bf; }
-  .ph-1 { --ph-a: #4d3a10; --ph-b: #7a5f1c; --ph-ink: #ffe9b0; }
-  .ph-2 { --ph-a: #363d17; --ph-b: #586328; --ph-ink: #e6efb8; }
-  .ph-3 { --ph-a: #4a1a16; --ph-b: #782c22; --ph-ink: #ffd2c8; }
-  .ph-4 { --ph-a: #40203a; --ph-b: #6a3552; --ph-ink: #ffd6e4; }
-  .ph-5 { --ph-a: #233a2d; --ph-b: #3e5f4c; --ph-ink: #d3ecd9; }
+  .ph {
+    --ph-bg: #2a251e;
+    --ph-ink: #a39786;
+  }
 }
 
-.ph-art {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+.ph svg {
+  width: clamp(44px, 20%, 72px);
+  height: auto;
   fill: none;
   stroke: currentColor;
-  stroke-width: 2.5;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
-  opacity: 0.18;
-}
-
-.ph-letter {
-  position: relative;
-  font: 700 clamp(3rem, 12vw, 4.25rem) / 1 Georgia, "Times New Roman", serif;
-  letter-spacing: 0.02em;
-  text-shadow: 0 1px 10px rgb(0 0 0 / 0.14);
-  user-select: none;
-}
-
-/* the slim version at the top of a recipe page */
-.ph-banner {
-  aspect-ratio: auto;
-  height: 84px;
-  border-radius: 12px;
-  margin: 12px 0;
-}
-
-.ph-banner .ph-letter {
-  font-size: 2.4rem;
 }
 
 .recipe-actions {

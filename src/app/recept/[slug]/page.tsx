@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { DeleteRecipeButton } from "@/components/DeleteRecipeButton";
 import { Header } from "@/components/Header";
-import { RecipePlaceholder } from "@/components/RecipePlaceholder";
 import { getRecipe } from "@/lib/queries";
 import { isLoggedIn } from "@/lib/session";
 import { isAllowedPublicUrl } from "@/lib/url";
@@ -36,11 +35,7 @@ export default async function RecipePage({ params }: Props) {
           {recipe.totalMinutes ? <span>{recipe.totalMinutes} perc</span> : null}
           {recipe.servings ? <span>{recipe.servings} adag</span> : null}
         </div>
-        {recipe.imageUrl ? (
-          <img className="hero" src={recipe.imageUrl} alt="" referrerPolicy="no-referrer" />
-        ) : (
-          <RecipePlaceholder slug={recipe.slug} name={recipe.name} variant="banner" />
-        )}
+        {recipe.imageUrl ? <img className="hero" src={recipe.imageUrl} alt="" referrerPolicy="no-referrer" /> : null}
 
         <h2>Hozzávalók</h2>
         <ul className="ingredients">
