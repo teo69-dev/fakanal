@@ -51,5 +51,24 @@ export function createFakeStore(s: FakeState): Store {
       await tick();
       s.recipes = s.recipes.filter((r) => r.row.id !== id);
     },
+    async findRecentByName(nameSearch, since) {
+      await tick();
+      return s.recipes
+        .filter((r) => r.row.nameSearch === nameSearch && r.at >= since)
+        .map((r) => ({
+          id: r.row.id,
+          slug: r.row.slug ?? "",
+          description: r.row.description ?? "",
+          createdAt: r.at,
+          ingredients: [...r.ingredients].sort((a, b) => a.position - b.position).map(({ amount, name }) => ({ amount, name })),
+        }))
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || (a.id < b.id ? -1 : 1));
+    },
+    async deleteRecipeBySlug(slug) {
+      await tick();
+      const before = s.recipes.length;
+      s.recipes = s.recipes.filter((r) => r.row.slug !== slug); // the ingredients are part of the entry: they go with it
+      return s.recipes.length < before;
+    },
   };
 }

@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { DeleteRecipeButton } from "@/components/DeleteRecipeButton";
 import { Header } from "@/components/Header";
 import { getRecipe } from "@/lib/queries";
+import { isLoggedIn } from "@/lib/session";
 import { isAllowedPublicUrl } from "@/lib/url";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +23,7 @@ export default async function RecipePage({ params }: Props) {
   if (!validSlug(slug)) notFound();
   const recipe = await getRecipe(slug);
   if (!recipe) notFound();
+  const loggedIn = await isLoggedIn();
 
   return (
     <div className="wrap">
@@ -56,6 +59,13 @@ export default async function RecipePage({ params }: Props) {
               {new URL(recipe.sourceUrl).hostname}
             </a>
           </p>
+        ) : null}
+
+        {/* only for a logged-in visitor; the server checks the session again for the deletion itself */}
+        {loggedIn ? (
+          <div className="recipe-actions">
+            <DeleteRecipeButton slug={recipe.slug} />
+          </div>
         ) : null}
       </article>
     </div>

@@ -66,10 +66,29 @@ export const IMPORT_MAX_TOTAL = 30;
  * password). Every import counts, successful or not; nothing is released. The keys cannot collide with a login key
  * (those are hex digests). Returns the first refusal, or null when both fit.
  */
-export async function enterImport(store: Store, ipHash: string, now = new Date()): Promise<{ retryAfterSeconds: number } | null> {
-  const perIp = await enterWindow(store, `import:${ipHash}`, IMPORT_MAX_PER_IP, IMPORT_WINDOW_MS, now);
+export function enterImport(store: Store, ipHash: string, now = new Date()): Promise<{ retryAfterSeconds: number } | null> {
+  return enterPair(store, "import", ipHash, IMPORT_MAX_PER_IP, IMPORT_MAX_TOTAL, now);
+}
+
+// Deleting is limited more tightly than writing: at most 7 per 15 minutes (about 28 an hour, under the 30 an hour that
+// may be saved), per address and for the whole site. One person tidying up never gets near it; a stolen password
+// cannot wipe the site in a minute.
+export const DELETE_MAX_PER_IP = 7;
+export const DELETE_MAX_TOTAL = 7;
+
+export function enterDelete(store: Store, ipHash: string, now = new Date()): Promise<{ retryAfterSeconds: number } | null> {
+  return enterPair(store, "delete", ipHash, DELETE_MAX_PER_IP, DELETE_MAX_TOTAL, now);
+}
+
+/**
+ * Two reserve-then-check counters at once: per address and for the whole site, both within the 15-minute window. Every
+ * call counts; nothing is released on success. A call refused by the site-wide counter gives its address row back.
+ * Returns the first refusal, or null when both fit.
+ */
+async function enterPair(store: Store, prefix: string, ipHash: string, maxPerIp: number, maxTotal: number, now: Date) {
+  const perIp = await enterWindow(store, `${prefix}:${ipHash}`, maxPerIp, IMPORT_WINDOW_MS, now);
   if (!perIp.allowed) return { retryAfterSeconds: perIp.retryAfterSeconds };
-  const total = await enterWindow(store, "import:all", IMPORT_MAX_TOTAL, IMPORT_WINDOW_MS, now);
+  const total = await enterWindow(store, `${prefix}:all`, maxTotal, IMPORT_WINDOW_MS, now);
   if (!total.allowed) {
     await perIp.release(); // this refused request does not count against the address either
     return { retryAfterSeconds: total.retryAfterSeconds };

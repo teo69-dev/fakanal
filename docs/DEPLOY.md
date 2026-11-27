@@ -64,6 +64,12 @@ Ha egy új verzió új migrációt hoz (a `drizzle/` mappában új `NNNN_*.sql` 
 
 A környezeti változók módosítása csak új deploynál lép életbe. A Vercel projektben: **Deployments**, a legutóbbi mellett **Redeploy**. Ezután minden `main`-re érkező push magától épít.
 
+## Törlés és dupla mentés
+
+- A recept oldalán belépve **Törlés** gomb van; egy kattintás csak rákérdez ("Biztosan törlöd?"), a törlést a megerősítő gomb küldi el. A törlés végleges (a hozzávalók is törlődnek, a recepthez nincs visszaállítás). Nincs hozzá migráció (a `ingredient` tábla a `recipe`-hez `ON DELETE CASCADE`-del kötődik).
+- Korlát: legfeljebb 7 törlés 15 percenként (címenként és az egész oldalra); 429 esetén néhány perc múlva újra lehet próbálni.
+- Ugyanaz a recept (azonos név, hozzávalók és leírás) egy percen belül kétszer mentve **egy** recept marad: a Mentés gomb küldés közben le van tiltva, és a szerver is felismeri az ismételt kérést, ilyenkor a meglévő recept oldalára visz.
+
 ## Az "Import linkből" funkció
 
 Az Új recept űrlap tetején egy cím beillesztésével az oldal strukturált (schema.org, JSON-LD) recept-adatát betölti az űrlapba. Mentés csak a Mentés gombbal, átnézés után történik. Nincs hozzá külön beállítás vagy környezeti változó.

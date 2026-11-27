@@ -245,6 +245,27 @@ button:disabled {
   color: var(--muted);
 }
 
+.recipe-actions {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+button.danger {
+  background: var(--danger);
+  color: var(--bg);
+}
+
+button.danger-outline {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+
+.delete-confirm p {
+  margin: 0 0 10px;
+}
+
 .narrow {
   max-width: 420px;
 }

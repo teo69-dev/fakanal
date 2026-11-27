@@ -256,6 +256,79 @@ describe("POST /api/recipes", () => {
     db.state.uniqueViolations = 2;
     expect((await createRecipe(req("/api/recipes", { body: recipe, cookie: session() }))).status).toBe(201);
     db.state.uniqueViolations = 3;
-    expect((await createRecipe(req("/api/recipes", { body: recipe, cookie: session() }))).status).toBe(409);
+    expect((await createRecipe(req("/api/recipes", { body: { ...recipe, name: "Másik recept" }, cookie: session() }))).status).toBe(409);
+  });
+
+  describe("the same recipe saved twice in a moment is one recipe", () => {
+    const save = (body: unknown = recipe) => createRecipe(req("/api/recipes", { body, cookie: session() }));
+    const answer = async (res: Response) => (await res.json()) as { slug: string; duplicate?: boolean };
+
+    it("a repeat answers 200 with the first recipe's address and creates nothing, nothing is used from the limit", async () => {
+      const first = await save();
+      expect(first.status).toBe(201);
+      const { slug } = await answer(first);
+      const second = await save();
+      expect(second.status).toBe(200);
+      expect(await answer(second)).toEqual({ slug, duplicate: true });
+      expect(db.state.recipes).toHaveLength(1);
+      expect(db.state.insertCalls).toBe(1); // the repeat was not even written
+      expect(revalidatePath).toHaveBeenCalledTimes(1);
+    });
+
+    it("the name counts the way it is searched: capitals and accents do not make a new recipe", async () => {
+      await save();
+      expect((await save({ ...recipe, name: "GULYASLEVES" })).status).toBe(200);
+      expect(db.state.recipes).toHaveLength(1);
+    });
+
+    it("anything that differs makes a new recipe: the text, an ingredient, an amount, the order, the name", async () => {
+      await save();
+      const variants = [
+        { ...recipe, description: "Más leírás." },
+        { ...recipe, ingredients: [{ amount: "600 g", name: "marhahús" }] },
+        { ...recipe, ingredients: [{ amount: "500 g", name: "sertéshús" }] },
+        { ...recipe, ingredients: [{ amount: "500 g", name: "marhahús" }, { name: "só" }] },
+        { ...recipe, name: "Gulyásleves 2" },
+      ];
+      for (const v of variants) expect((await save(v)).status, JSON.stringify(v).slice(0, 80)).toBe(201);
+      expect(db.state.recipes).toHaveLength(1 + variants.length);
+      // the order of the ingredients matters too
+      const two = { ...recipe, name: "Kétsoros", ingredients: [{ name: "a" }, { name: "b" }] };
+      expect((await save(two)).status).toBe(201);
+      expect((await save({ ...two, ingredients: [{ name: "b" }, { name: "a" }] })).status).toBe(201);
+    });
+
+    it("the same recipe a minute later is a new recipe", async () => {
+      await save();
+      db.state.recipes[0]!.at = new Date(Date.now() - 61_000);
+      expect((await save()).status).toBe(201);
+      expect(db.state.recipes).toHaveLength(2);
+    });
+
+    it("two copies of one request at the same time: exactly one recipe survives and both answers name it", async () => {
+      db.state.delayMs = 8;
+      const results = await Promise.all([save(), save()]);
+      const bodies = await Promise.all(results.map(answer));
+      expect(db.state.recipes).toHaveLength(1);
+      expect(new Set(bodies.map((b) => b.slug)).size).toBe(1);
+      expect(bodies[0]!.slug).toBe(db.state.recipes[0]!.row.slug);
+      expect(results.map((r) => r.status).sort()).toEqual([200, 201]);
+    });
+
+    it("ten copies at the same time: one recipe, one address", async () => {
+      db.state.delayMs = 5;
+      const results = await Promise.all(Array.from({ length: 10 }, () => save()));
+      const slugs = new Set((await Promise.all(results.map(answer))).map((b) => b.slug));
+      expect(db.state.recipes).toHaveLength(1);
+      expect([...slugs]).toEqual([db.state.recipes[0]!.row.slug]);
+      expect(results.filter((r) => r.status === 201)).toHaveLength(1);
+    });
+
+    it("a repeat does not use up the hourly limit", async () => {
+      db.state.recipes = Array.from({ length: 29 }, (_, i) => ({ row: { id: `x${i}` }, ingredients: [], at: new Date() }));
+      expect((await save()).status).toBe(201); // the 30th
+      expect((await save()).status).toBe(200); // a repeat of it is not a 31st
+      expect(db.state.recipes).toHaveLength(30);
+    });
   });
 });

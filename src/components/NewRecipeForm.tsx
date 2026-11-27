@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { IMPORT_MESSAGES, type ImportAnswer } from "@/lib/import/messages";
 import { LIMITS } from "@/lib/validation";
 
@@ -26,6 +26,10 @@ export function NewRecipeForm() {
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importNote, setImportNote] = useState<string | null>(null);
+  // A synchronous guard next to the state: a second click or Enter can arrive before React has re-rendered the button as
+  // disabled, and the state alone would let it send a second request.
+  const saving = useRef(false);
+  const importing = useRef(false);
 
   const setRow = (i: number, patch: Partial<Row>) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
 
@@ -34,11 +38,13 @@ export function NewRecipeForm() {
 
   // Fills the form from the draft the server read out of the page's schema.org data. Nothing is saved here.
   async function runImport() {
-    if (importUrl.trim() === "") return;
+    if (importUrl.trim() === "" || importing.current) return;
     if (formHasContent() && !window.confirm("Az űrlapon már van kitöltött adat. Felülírjam az importált recepttel?")) return;
+    importing.current = true;
     setImportBusy(true);
     setImportError(null);
     setImportNote(null);
+    let leaving = false;
     try {
       const res = await fetch("/api/import", {
         method: "POST",
@@ -46,6 +52,7 @@ export function NewRecipeForm() {
         body: JSON.stringify({ url: importUrl.trim() }),
       });
       if (res.status === 401) {
+        leaving = true;
         router.push("/belepes");
         return;
       }
@@ -74,14 +81,21 @@ export function NewRecipeForm() {
     } catch {
       setImportError("Nem sikerült elérni a szervert.");
     } finally {
-      setImportBusy(false);
+      if (!leaving) {
+        importing.current = false;
+        setImportBusy(false);
+      }
     }
   }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (saving.current) return; // a second click while the first save is on its way
+    saving.current = true;
     setBusy(true);
     setErrors([]);
+    // after a successful save the page navigates: the button stays disabled until it has, so there is no second click
+    let leaving = false;
     try {
       const res = await fetch("/api/recipes", {
         method: "POST",
@@ -98,13 +112,16 @@ export function NewRecipeForm() {
           ingredients: rows.filter((r) => r.amount.trim() !== "" || r.name.trim() !== ""),
         }),
       });
-      if (res.status === 201) {
+      // 201: saved. 200: the server found the same recipe saved a moment ago and answers with that one.
+      if (res.status === 201 || res.status === 200) {
         const { slug } = (await res.json()) as { slug: string };
+        leaving = true;
         router.push(`/recept/${slug}`);
         router.refresh();
         return;
       }
       if (res.status === 401) {
+        leaving = true;
         router.push("/belepes");
         return;
       }
@@ -116,7 +133,10 @@ export function NewRecipeForm() {
     } catch {
       setErrors(["Nem sikerült elérni a szervert."]);
     } finally {
-      setBusy(false);
+      if (!leaving) {
+        saving.current = false;
+        setBusy(false);
+      }
     }
   }
 
@@ -224,7 +244,7 @@ export function NewRecipeForm() {
         </ul>
       ) : null}
       <button type="submit" disabled={busy}>
-        Mentés
+        {busy ? "Mentés..." : "Mentés"}
       </button>
     </form>
     </>
