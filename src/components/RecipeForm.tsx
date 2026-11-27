@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useRef, useState } from "react";
 import { IMPORT_MESSAGES, type ImportAnswer } from "@/lib/import/messages";
@@ -10,16 +11,34 @@ type Issue = { field: string; message: string };
 
 const toInt = (v: string) => (v.trim() === "" ? null : Number(v));
 
-export function NewRecipeForm() {
+/** What an existing recipe puts into the form when it is edited: every field as the form shows it. */
+export type RecipeFormValues = {
+  name: string;
+  servings: number | null;
+  totalMinutes: number | null;
+  category: string;
+  imageUrl: string;
+  sourceUrl: string;
+  description: string;
+  /** Already split into amount and name: the editor shows them as they are and never splits a line again. */
+  ingredients: { amount: string; name: string }[];
+};
+
+// "create": a new recipe (with the link import); "edit": the recipe with this address, loaded into the same form
+export type RecipeFormProps = { mode: "create" } | { mode: "edit"; slug: string; initial: RecipeFormValues };
+
+export function RecipeForm(props: RecipeFormProps) {
   const router = useRouter();
-  const [name, setName] = useState("");
-  const [servings, setServings] = useState("");
-  const [totalMinutes, setTotalMinutes] = useState("");
-  const [category, setCategory] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
-  const [description, setDescription] = useState("");
-  const [sourceUrl, setSourceUrl] = useState("");
-  const [rows, setRows] = useState<Row[]>([{ amount: "", name: "" }]);
+  const initial = props.mode === "edit" ? props.initial : null;
+  const editing = props.mode === "edit";
+  const [name, setName] = useState(initial?.name ?? "");
+  const [servings, setServings] = useState(initial?.servings == null ? "" : String(initial.servings));
+  const [totalMinutes, setTotalMinutes] = useState(initial?.totalMinutes == null ? "" : String(initial.totalMinutes));
+  const [category, setCategory] = useState(initial?.category ?? "");
+  const [imageUrl, setImageUrl] = useState(initial?.imageUrl ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [sourceUrl, setSourceUrl] = useState(initial?.sourceUrl ?? "");
+  const [rows, setRows] = useState<Row[]>(initial && initial.ingredients.length > 0 ? initial.ingredients.map((i) => ({ ...i })) : [{ amount: "", name: "" }]);
   const [errors, setErrors] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [importUrl, setImportUrl] = useState("");
@@ -97,8 +116,8 @@ export function NewRecipeForm() {
     // after a successful save the page navigates: the button stays disabled until it has, so there is no second click
     let leaving = false;
     try {
-      const res = await fetch("/api/recipes", {
-        method: "POST",
+      const res = await fetch(props.mode === "edit" ? `/api/recipes/${encodeURIComponent(props.slug)}` : "/api/recipes", {
+        method: props.mode === "edit" ? "PUT" : "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           name,
@@ -112,7 +131,8 @@ export function NewRecipeForm() {
           ingredients: rows.filter((r) => r.amount.trim() !== "" || r.name.trim() !== ""),
         }),
       });
-      // 201: saved. 200: the server found the same recipe saved a moment ago and answers with that one.
+      // 201: saved. 200: saved, or (a new recipe) the server found the same recipe saved a moment ago and answers with that
+      // one. An edit always goes back to the recipe's own page.
       if (res.status === 201 || res.status === 200) {
         const { slug } = (await res.json()) as { slug: string };
         leaving = true;
@@ -128,8 +148,14 @@ export function NewRecipeForm() {
       if (res.status === 400) {
         const data = (await res.json().catch(() => null)) as { issues?: Issue[] } | null;
         setErrors(data?.issues?.map((i) => `${i.field}: ${i.message}`) ?? ["Hibás adatok."]);
-      } else if (res.status === 429) setErrors(["Egy óra alatt legfeljebb 30 recept vehető fel. Próbáld később."]);
-      else setErrors(["Nem sikerült a mentés. Próbáld újra."]);
+      } else if (res.status === 404 && editing) {
+        setErrors(["Ez a recept közben törlődött, nincs mit menteni."]);
+      } else if (res.status === 409 && editing) {
+        const data = (await res.json().catch(() => null)) as { slug?: string } | null;
+        setErrors([`Pontosan ilyen recept már van${data?.slug ? ` (/recept/${data.slug})` : ""}. Változtass valamit, vagy hagyd az eredetit.`]);
+      } else if (res.status === 429) {
+        setErrors([editing ? "Túl sok mentés rövid időn belül. Próbáld újra pár perc múlva." : "Egy óra alatt legfeljebb 30 recept vehető fel. Próbáld később."]);
+      } else setErrors(["Nem sikerült a mentés. Próbáld újra."]);
     } catch {
       setErrors(["Nem sikerült elérni a szervert."]);
     } finally {
@@ -142,6 +168,7 @@ export function NewRecipeForm() {
 
   return (
     <>
+      {editing ? null : (
       <section className="import-box" aria-labelledby="import-title">
         <h2 id="import-title">Import linkből</h2>
         <p className="muted">
@@ -173,6 +200,7 @@ export function NewRecipeForm() {
           </p>
         ) : null}
       </section>
+      )}
 
     <form onSubmit={submit}>
       <div className="field">
@@ -201,9 +229,9 @@ export function NewRecipeForm() {
         <input id="image" type="url" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} maxLength={LIMITS.imageUrl} placeholder="https://" />
       </div>
 
-      {sourceUrl ? (
+      {sourceUrl || editing ? (
         <div className="field">
-          <label htmlFor="source">Forrás (az importált oldal)</label>
+          <label htmlFor="source">{editing ? "Forrás (https://…, nem kötelező)" : "Forrás (az importált oldal)"}</label>
           <div className="import-row">
             <input id="source" type="url" value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} maxLength={LIMITS.sourceUrl} />
             <button type="button" className="secondary" onClick={() => setSourceUrl("")}>
@@ -243,9 +271,16 @@ export function NewRecipeForm() {
           ))}
         </ul>
       ) : null}
-      <button type="submit" disabled={busy}>
-        {busy ? "Mentés..." : "Mentés"}
-      </button>
+      <div className="import-row">
+        <button type="submit" disabled={busy}>
+          {busy ? "Mentés..." : "Mentés"}
+        </button>
+        {props.mode === "edit" ? (
+          <Link className="button secondary" href={`/recept/${props.slug}`} aria-disabled={busy}>
+            Mégsem
+          </Link>
+        ) : null}
+      </div>
     </form>
     </>
   );

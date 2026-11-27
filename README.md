@@ -4,7 +4,7 @@ Egyszerű receptes oldal. Az olvasás és a keresés nyilvános, új receptet cs
 
 - Next.js (App Router), TypeScript, Postgres (Neon), Drizzle ORM, zod
 - Oldalak: `/` lista és keresés, `/recept/[slug]`, `/belepes`, `/uj`
-- API: `POST /api/login`, `POST /api/logout`, `POST /api/recipes`, `DELETE /api/recipes/[slug]` (törlés, csak belépve), `POST /api/import` (recept betöltése egy oldal schema.org-adatából, csak belépve)
+- API: `POST /api/login`, `POST /api/logout`, `POST /api/recipes`, `PUT /api/recipes/[slug]` (szerkesztés) és `DELETE /api/recipes/[slug]` (törlés), mindkettő csak belépve, `POST /api/import` (recept betöltése egy oldal schema.org-adatából, csak belépve)
 
 ## Helyi fejlesztés
 

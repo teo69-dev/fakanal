@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Header } from "@/components/Header";
-import { NewRecipeForm } from "@/components/NewRecipeForm";
+import { RecipeForm } from "@/components/RecipeForm";
 import { isLoggedIn } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export default async function NewRecipePage() {
     <div className="wrap">
       <Header />
       <h1>Új recept</h1>
-      <NewRecipeForm />
+      <RecipeForm mode="create" />
     </div>
   );
 }

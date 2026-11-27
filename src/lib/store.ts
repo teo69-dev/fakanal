@@ -17,6 +17,9 @@ export type NewRecipe = {
 
 export type NewIngredient = { position: number; amount: string | null; name: string };
 
+/** The fields of a recipe that an edit replaces (the id, the address and the time of creation stay). */
+export type RecipeChanges = Omit<NewRecipe, "id" | "slug">;
+
 /** A recipe saved a moment ago, with what is needed to tell whether a new one is the same recipe again. */
 export type RecentRecipe = {
   id: string;
@@ -48,6 +51,8 @@ export type Store = {
   findRecentByName(nameSearch: string, since: Date): Promise<RecentRecipe[]>;
   /** Deletes the recipe with this slug (its ingredients go with it); false when there is none. */
   deleteRecipeBySlug(slug: string): Promise<boolean>;
+  /** Replaces the fields and ALL ingredients of the recipe with this slug in one transaction; false when there is none. */
+  updateRecipeBySlug(slug: string, changes: RecipeChanges, ingredients: NewIngredient[]): Promise<boolean>;
 };
 
 export function getStore(): Store {
@@ -108,6 +113,23 @@ export function getStore(): Store {
         .where(inArray(ingredient.recipeId, rows.map((r) => r.id)))
         .orderBy(asc(ingredient.position));
       return rows.map((r) => ({ ...r, ingredients: parts.filter((p) => p.recipeId === r.id).map(({ amount, name }) => ({ amount, name })) }));
+    },
+    async updateRecipeBySlug(slug, changes, ingredients) {
+      const [found] = await db.select({ id: recipe.id }).from(recipe).where(eq(recipe.slug, slug)).limit(1);
+      if (!found) return false;
+      try {
+        // one batch = one transaction: the recipe never shows the new fields with the old ingredients, or none
+        const [updated] = await db.batch([
+          db.update(recipe).set(changes).where(eq(recipe.id, found.id)).returning({ id: recipe.id }),
+          db.delete(ingredient).where(eq(ingredient.recipeId, found.id)),
+          db.insert(ingredient).values(ingredients.map((i) => ({ ...i, recipeId: found.id }))),
+        ]);
+        return updated.length > 0;
+      } catch (error) {
+        // the recipe was deleted between the lookup and the batch: the ingredients' foreign key refuses, nothing is kept
+        if (typeof error === "object" && error !== null && (error as { code?: unknown }).code === "23503") return false;
+        throw error;
+      }
     },
     async deleteRecipeBySlug(slug) {
       // one statement; the ingredients go with it (ON DELETE CASCADE in the migration)

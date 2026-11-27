@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { DeleteRecipeButton } from "@/components/DeleteRecipeButton";
 import { Header } from "@/components/Header";
+import { RecipeActions } from "@/components/RecipeActions";
 import { getRecipe } from "@/lib/queries";
 import { isLoggedIn } from "@/lib/session";
+import { validSlug } from "@/lib/slug";
 import { isAllowedPublicUrl } from "@/lib/url";
 
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ slug: string }> };
 
-const validSlug = (s: string) => /^[a-z0-9-]{1,80}$/.test(s);
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
@@ -61,11 +61,9 @@ export default async function RecipePage({ params }: Props) {
           </p>
         ) : null}
 
-        {/* only for a logged-in visitor; the server checks the session again for the deletion itself */}
+        {/* only for a logged-in visitor; the server checks the session again for the edit and the deletion themselves */}
         {loggedIn ? (
-          <div className="recipe-actions">
-            <DeleteRecipeButton slug={recipe.slug} />
-          </div>
+          <RecipeActions slug={recipe.slug} />
         ) : null}
       </article>
     </div>

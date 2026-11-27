@@ -38,3 +38,12 @@ export async function recentDuplicates(store: Store, content: RecipeContent, now
   const candidates = await store.findRecentByName(content.nameSearch, new Date(now.getTime() - DUPLICATE_WINDOW_MS));
   return candidates.filter((c) => same(c, content));
 }
+
+/**
+ * Every recipe of ANY age with exactly this content (oldest first). An edit uses it to refuse to turn a recipe into a
+ * second copy of another one; the one-minute window of a double click does not apply to editing.
+ */
+export async function sameContentAnywhere(store: Store, content: RecipeContent): Promise<RecentRecipe[]> {
+  const candidates = await store.findRecentByName(content.nameSearch, new Date(0));
+  return candidates.filter((c) => same(c, content));
+}

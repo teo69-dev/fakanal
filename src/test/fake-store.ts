@@ -1,4 +1,4 @@
-import type { NewIngredient, NewRecipe, RecentRecipe, Store } from "@/lib/store";
+import type { NewIngredient, NewRecipe, RecentRecipe, RecipeChanges, Store } from "@/lib/store";
 
 // An in-memory stand-in for the database, for tests only. Every Store call is ONE statement: it waits `delayMs` (the
 // stand-in for a database round trip, which is where simultaneous requests interleave) and then acts at once.
@@ -74,6 +74,14 @@ export function createFakeStore(s: FakeState): Store {
           ingredients: [...r.ingredients].sort((a, b) => a.position - b.position).map(({ amount, name }) => ({ amount, name })),
         }))
         .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || (a.id < b.id ? -1 : 1));
+    },
+    async updateRecipeBySlug(slug: string, changes: RecipeChanges, ingredients: NewIngredient[]) {
+      await tick();
+      const entry = s.recipes.find((r) => r.row.slug === slug);
+      if (!entry) return false;
+      entry.row = { ...entry.row, ...changes }; // the id, the address and the time of creation stay
+      entry.ingredients = ingredients;
+      return true;
     },
     async deleteRecipeBySlug(slug) {
       await tick();

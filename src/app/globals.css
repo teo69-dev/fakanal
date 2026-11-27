@@ -277,9 +277,19 @@ button:disabled {
 }
 
 .recipe-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
   margin-top: 32px;
   padding-top: 16px;
   border-top: 1px solid var(--line);
+}
+
+.button.secondary {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--line);
 }
 
 button.danger {

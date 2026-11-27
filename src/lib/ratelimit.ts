@@ -80,6 +80,16 @@ export function enterDelete(store: Store, ipHash: string, now = new Date()): Pro
   return enterPair(store, "delete", ipHash, DELETE_MAX_PER_IP, DELETE_MAX_TOTAL, now);
 }
 
+// Editing overwrites a recipe (there is no history), so it is limited too: at most 12 saves per 15 minutes per address and
+// 12 for the whole site (about 48 an hour). Correcting a recipe takes a few saves; a stolen password cannot rewrite
+// the whole site in a minute.
+export const EDIT_MAX_PER_IP = 12;
+export const EDIT_MAX_TOTAL = 12;
+
+export function enterEdit(store: Store, ipHash: string, now = new Date()): Promise<{ retryAfterSeconds: number } | null> {
+  return enterPair(store, "edit", ipHash, EDIT_MAX_PER_IP, EDIT_MAX_TOTAL, now);
+}
+
 /**
  * Two reserve-then-check counters at once: per address and for the whole site, both within the 15-minute window. Every
  * call counts; nothing is released on success. A call refused by the site-wide counter gives its address row back.
