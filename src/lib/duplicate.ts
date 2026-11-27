@@ -9,11 +9,23 @@ export const DUPLICATE_WINDOW_MS = 60_000;
 export type RecipeContent = {
   nameSearch: string;
   description: string;
+  servings: number | null;
+  totalMinutes: number | null;
+  category: string | null;
+  imageUrl: string | null;
+  sourceUrl: string | null;
   ingredients: { amount: string | null; name: string }[];
 };
 
+// EVERY field of the form counts: a recipe saved again with a corrected serving size, time, category or picture is a
+// correction, not a repeat, and must not be swallowed (there is no editing: saving again is how a mistake is fixed).
 const same = (a: RecentRecipe, c: RecipeContent) =>
   a.description === c.description &&
+  a.servings === c.servings &&
+  a.totalMinutes === c.totalMinutes &&
+  a.category === c.category &&
+  a.imageUrl === c.imageUrl &&
+  a.sourceUrl === c.sourceUrl &&
   a.ingredients.length === c.ingredients.length &&
   a.ingredients.every((x, i) => (x.amount ?? "") === (c.ingredients[i]?.amount ?? "") && x.name === c.ingredients[i]?.name);
 

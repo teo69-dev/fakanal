@@ -324,6 +324,53 @@ describe("POST /api/recipes", () => {
       expect(results.filter((r) => r.status === 201)).toHaveLength(1);
     });
 
+    it("a correction is not a repeat: a changed serving size, time, category, picture or source makes a new recipe", async () => {
+      await save({ ...recipe, servings: 4, totalMinutes: 90, category: "leves", imageUrl: "https://example.com/a.jpg", sourceUrl: "https://example.com/r" });
+      const same = { ...recipe, servings: 4, totalMinutes: 90, category: "leves", imageUrl: "https://example.com/a.jpg", sourceUrl: "https://example.com/r" };
+      const changes: Record<string, unknown> = {
+        servings: 6,
+        totalMinutes: 60,
+        category: "főétel",
+        imageUrl: "https://example.com/b.jpg",
+        sourceUrl: "https://example.com/other",
+      };
+      for (const [field, value] of Object.entries(changes)) {
+        const before = db.state.recipes.length;
+        expect((await save({ ...same, [field]: value })).status, field).toBe(201);
+        expect(db.state.recipes.length, field).toBe(before + 1);
+      }
+      // a field that was filled and is now empty is a change too, and so is the other way round
+      expect((await save({ ...same, servings: null })).status).toBe(201);
+      expect((await save({ ...recipe })).status).toBe(201); // everything optional empty
+    });
+
+    it("the optional fields count as equal when both are empty (null equals null, blank equals absent)", async () => {
+      expect((await save({ ...recipe, servings: null, totalMinutes: null, category: "", imageUrl: "", sourceUrl: null })).status).toBe(201);
+      expect((await save({ ...recipe, servings: null, totalMinutes: null, category: null, imageUrl: null, sourceUrl: "" })).status).toBe(200);
+      expect(db.state.recipes).toHaveLength(1);
+    });
+
+    it("the loser names the recipe it finds AFTER its own row is gone, not the one it saw before", async () => {
+      const other = (id: string, slug: string) => ({ id, slug, description: recipe.description, servings: 4, totalMinutes: 90, category: "leves", imageUrl: "https://example.com/gulyas.jpg", sourceUrl: null, createdAt: new Date(Date.now() - 5), ingredients: [{ amount: "500 g", name: "marhahús" }] });
+      // call 1 (before the insert): nothing; call 2 (after): an older copy W; call 3 (after the own row is gone): W has stepped aside for X
+      db.state.recentScript = (call) => (call === 1 ? [] : call === 2 ? [other("w", "gulyasleves-w")] : call === 3 ? [other("x", "gulyasleves-x")] : undefined);
+      const res = await save();
+      expect(res.status).toBe(200);
+      expect(await answer(res)).toEqual({ slug: "gulyasleves-x", duplicate: true });
+      expect(db.state.recipes).toHaveLength(0); // the loser's own row is deleted
+    });
+
+    it("if nothing is left to point to, the request is not reported as saved (503, try again) and nothing is left behind", async () => {
+      const other = { id: "w", slug: "gulyasleves-w", description: recipe.description, servings: 4, totalMinutes: 90, category: "leves", imageUrl: "https://example.com/gulyas.jpg", sourceUrl: null, createdAt: new Date(Date.now() - 5), ingredients: [{ amount: "500 g", name: "marhahús" }] };
+      db.state.recentScript = (call) => (call === 1 ? [] : call === 2 ? [other] : call === 3 ? [] : undefined);
+      const res = await save();
+      expect(res.status).toBe(503);
+      expect(res.headers.get("retry-after")).toBe("1");
+      expect(await res.json()).toEqual({ error: "try_again" });
+      expect(db.state.recipes).toHaveLength(0);
+      expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
     it("a repeat does not use up the hourly limit", async () => {
       db.state.recipes = Array.from({ length: 29 }, (_, i) => ({ row: { id: `x${i}` }, ingredients: [], at: new Date() }));
       expect((await save()).status).toBe(201); // the 30th

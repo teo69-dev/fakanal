@@ -22,6 +22,11 @@ export type RecentRecipe = {
   id: string;
   slug: string;
   description: string;
+  servings: number | null;
+  totalMinutes: number | null;
+  category: string | null;
+  imageUrl: string | null;
+  sourceUrl: string | null;
   createdAt: Date;
   ingredients: { amount: string | null; name: string }[];
 };
@@ -82,7 +87,17 @@ export function getStore(): Store {
     },
     async findRecentByName(nameSearch, since) {
       const rows = await db
-        .select({ id: recipe.id, slug: recipe.slug, description: recipe.description, createdAt: recipe.createdAt })
+        .select({
+          id: recipe.id,
+          slug: recipe.slug,
+          description: recipe.description,
+          servings: recipe.servings,
+          totalMinutes: recipe.totalMinutes,
+          category: recipe.category,
+          imageUrl: recipe.imageUrl,
+          sourceUrl: recipe.sourceUrl,
+          createdAt: recipe.createdAt,
+        })
         .from(recipe)
         .where(and(eq(recipe.nameSearch, nameSearch), gte(recipe.createdAt, since)))
         .orderBy(asc(recipe.createdAt), asc(recipe.id));

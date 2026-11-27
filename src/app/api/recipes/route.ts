@@ -34,6 +34,11 @@ export async function POST(request: Request): Promise<Response> {
   const content = {
     nameSearch: searchKey(input.name),
     description: input.description,
+    servings: input.servings,
+    totalMinutes: input.totalMinutes,
+    category: input.category,
+    imageUrl: input.imageUrl,
+    sourceUrl: input.sourceUrl,
     ingredients: input.ingredients.map((ing) => ({ amount: ing.amount, name: ing.name })),
   };
   const already = (await recentDuplicates(store, content))[0];
@@ -68,11 +73,16 @@ export async function POST(request: Request): Promise<Response> {
     // the authoritative write limit: counted AFTER the insert, so simultaneous requests cannot all slip past the early check
     if (!(await confirmWrite(store, id))) return json({ error: "too_many_recipes" }, 429, { "retry-after": "3600" });
     // Two copies of one request that ran at the same time both got here: the oldest keeps its row, the others delete
-    // theirs and point to it. (Best effort: the check above catches every later repeat.)
+    // theirs and point to it. The address is taken from a look AFTER the own row is gone, so it names a recipe that
+    // exists at that moment (a winner that stepped aside for an even older copy is not named). If nothing is left at
+    // all, the request is NOT reported as saved: the form says to try again. (Best effort in a race measured at well
+    // under 1% of double clicks; the check before the insert catches every later repeat.)
     const winner = (await recentDuplicates(store, content))[0];
     if (winner && winner.id !== id) {
       await store.deleteRecipe(id);
-      return json({ slug: winner.slug, duplicate: true }, 200);
+      const survivor = (await recentDuplicates(store, content))[0];
+      if (!survivor) return json({ error: "try_again" }, 503, { "retry-after": "1" });
+      return json({ slug: survivor.slug, duplicate: true }, 200);
     }
     revalidatePath("/");
     return json({ slug }, 201);

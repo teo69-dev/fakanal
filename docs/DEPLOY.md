@@ -68,7 +68,7 @@ A környezeti változók módosítása csak új deploynál lép életbe. A Verce
 
 - A recept oldalán belépve **Törlés** gomb van; egy kattintás csak rákérdez ("Biztosan törlöd?"), a törlést a megerősítő gomb küldi el. A törlés végleges (a hozzávalók is törlődnek, a recepthez nincs visszaállítás). Nincs hozzá migráció (a `ingredient` tábla a `recipe`-hez `ON DELETE CASCADE`-del kötődik).
 - Korlát: legfeljebb 7 törlés 15 percenként (címenként és az egész oldalra); 429 esetén néhány perc múlva újra lehet próbálni.
-- Ugyanaz a recept (azonos név, hozzávalók és leírás) egy percen belül kétszer mentve **egy** recept marad: a Mentés gomb küldés közben le van tiltva, és a szerver is felismeri az ismételt kérést, ilyenkor a meglévő recept oldalára visz.
+- Ugyanaz a recept (azonos név, hozzávalók, leírás, adag, idő, kategória, kép és forrás) egy percen belül kétszer mentve **egy** recept marad: a Mentés gomb küldés közben le van tiltva, és a szerver is felismeri az ismételt kérést, ilyenkor a meglévő recept oldalára visz. Ha bármelyik mező eltér (egy javított adag, idő, kategória vagy kép), az új recept: szerkesztés nincs, az újramentés a javítás módja. Ritka versenyhelyzetben (két kérés ugyanabban a pillanatban) a szerver "próbáld újra" választ adhat, ilyenkor érdemes a listán megnézni, hogy a recept megvan-e, mielőtt másodszor mented.
 
 ## Az "Import linkből" funkció
 
@@ -117,4 +117,4 @@ Ez a lépés nem kötelező, az oldal nélküle is működik.
 
 ## Ismert kockázat
 
-Ha a jelszó gyenge vagy kiszivárog, bárki kaphat írási jogot, és spam-recepteket vehet fel. A meglévő recepteket nem tudja módosítani vagy törölni, mert a szerkesztés és a törlés nincs megvalósítva. A jelszócsere kódváltoztatás nélkül megoldja.
+Ha a jelszó gyenge vagy kiszivárog, bárki kaphat írási jogot: spam-recepteket vehet fel (legfeljebb kb. 30-at óránként), és TÖRÖLHET is meglévő recepteket (legfeljebb 7-et 15 percenként az egész oldalra, azaz sebességfékkel kb. 670-et naponta; a törlés végleges, visszaállítás nincs). Szerkesztés nincs, a meglévő receptet átírni nem lehet. A jelszócsere kódváltoztatás nélkül megoldja; az adatbázis rendszeres mentése (Neon: branch vagy exportálás) a végleges törlés ellen véd.
