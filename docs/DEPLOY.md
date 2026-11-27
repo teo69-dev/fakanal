@@ -70,7 +70,7 @@ Az Új recept űrlap tetején egy cím beillesztésével az oldal strukturált (
 
 - csak belépve használható; csak nyilvános `https://` cím (alapport, IP-cím, `localhost`, belső név és `felhasználó:jelszó@` nélkül) lehet;
 - a szerver csak nyilvános címekre csatlakozik (a névfeloldás után is ellenőrizve, átirányításoknál is, legfeljebb 3 átirányítás), 8 másodperc és 5 MB a korlát, csak HTML;
-- ha az oldalon nincs strukturált recept-adat, az oldal ezt kimondja, és nem próbál kitalálni semmit; a hozzávalók sorai egészben kerülnek be (a mennyiséget nem választja szét);
+- ha az oldalon nincs strukturált recept-adat, az oldal ezt kimondja, és nem próbál kitalálni semmit; a hozzávalók sor elején álló mennyiség és mértékegység (pl. `50 dkg`, `2-3 db`, `1 kis csokor`, `1/2 tk`) a mennyiség mezőbe kerül, a többi a névbe; ahol a felbontás nem egyértelmű (nincs szám az elején, `kb.`, `vagy`, zárójel, kötőjel a mennyiség után), a teljes sor a névben marad, semmi nem vész el és nem módosul;
 - korlát: címenként 10 import 15 percen belül, az egész oldalra 30 (a számláló az adatbázisban él);
 - az importált recept oldalán "Forrás: <hoszt>" link jelenik meg.
 

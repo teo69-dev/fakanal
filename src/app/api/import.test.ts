@@ -117,7 +117,7 @@ describe("POST /api/import: the answer", () => {
         sourceUrl: "https://example.com/gulyas",
         description: "1. Pirítsd meg.\n\n2. Főzd meg.",
         ingredients: [
-          { amount: "", name: "500 g marhahús" },
+          { amount: "500 g", name: "marhahús" },
           { amount: "", name: "só" },
         ],
       },

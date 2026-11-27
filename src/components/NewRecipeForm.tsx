@@ -63,7 +63,7 @@ export function NewRecipeForm() {
         setErrors([]);
         const missing = data.missing ?? [];
         setImportNote(
-          "Betöltve az oldal adataiból. Nézd át mentés előtt: a hozzávalók sorai az oldal szövegei egészben, a mennyiséget nem választottam szét." +
+          "Betöltve az oldal adataiból. Nézd át mentés előtt, különösen a hozzávalókat: a sor elején álló mennyiséget és mértékegységet külön mezőbe tettem, ahol nem voltam biztos benne, a teljes sor a névben maradt." +
             (missing.length > 0 ? ` Az oldalon nem találtam: ${missing.join(", ")}. Ezeket pótold kézzel.` : ""),
         );
         return;

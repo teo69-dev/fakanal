@@ -14,7 +14,7 @@ const FULL: ExtractedRecipe = {
 const SOURCE = "https://example.com/gulyas";
 
 describe("buildDraft", () => {
-  it("turns a complete extraction into the form draft; ingredient lines go in whole, unsplit", () => {
+  it("turns a complete extraction into the form draft; the quantity and unit of an ingredient line become its amount", () => {
     const r = buildDraft(FULL, SOURCE);
     expect(r).toEqual({
       ok: true,
@@ -28,7 +28,7 @@ describe("buildDraft", () => {
         sourceUrl: SOURCE,
         description: "1. Pirítsd meg.\n\n2. Főzd meg.",
         ingredients: [
-          { amount: "", name: "500 g marhahús" },
+          { amount: "500 g", name: "marhahús" },
           { amount: "", name: "só" },
         ],
       },
@@ -57,6 +57,25 @@ describe("buildDraft", () => {
       const r = buildDraft({ ...FULL, ...change }, SOURCE);
       expect(r, field).toEqual({ ok: false, tooLong: [field] });
     }
+  });
+
+  it("splits each ingredient line on its own and keeps the whole line when the split is not clear", () => {
+    const r = buildDraft({ ...FULL, ingredients: ["50 dkg Csirkemell", "2-3 db Újhagyma", "1 kis csokor Petrezselyemzöld", "Olaj", "2 tojás", "kb. 2 dl tej", "200 g"] }, SOURCE);
+    expect(r.ok && r.draft.ingredients).toEqual([
+      { amount: "50 dkg", name: "Csirkemell" },
+      { amount: "2-3 db", name: "Újhagyma" },
+      { amount: "1 kis csokor", name: "Petrezselyemzöld" },
+      { amount: "", name: "Olaj" },
+      { amount: "2", name: "tojás" },
+      { amount: "", name: "kb. 2 dl tej" },
+      { amount: "", name: "200 g" },
+    ]);
+  });
+
+  it("the name length limit still applies to what is left of the line, and the amount limit to the amount", () => {
+    expect(buildDraft({ ...FULL, ingredients: [`2 db ${"x".repeat(301)}`] }, SOURCE)).toEqual({ ok: false, tooLong: ["hozzávalók"] });
+    const ok = buildDraft({ ...FULL, ingredients: [`2 db ${"x".repeat(300)}`] }, SOURCE);
+    expect(ok.ok && ok.draft.ingredients[0]).toEqual({ amount: "2 db", name: "x".repeat(300) });
   });
 
   it("names every field that is too long", () => {

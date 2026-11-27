@@ -1,5 +1,6 @@
 import { recipeInputSchema } from "@/lib/validation";
 import type { ExtractedRecipe } from "./extract";
+import { splitIngredient } from "./ingredient";
 import type { ImportDraft } from "./messages";
 
 export type DraftResult = { ok: true; draft: ImportDraft; missing: string[] } | { ok: false; tooLong: string[] };
@@ -28,8 +29,9 @@ export function buildDraft(extracted: ExtractedRecipe, sourceUrl: string): Draft
   if (extracted.totalMinutes !== null) candidate.totalMinutes = extracted.totalMinutes;
   if (extracted.category !== null) candidate.category = extracted.category;
   if (extracted.imageUrl !== null) candidate.imageUrl = extracted.imageUrl;
-  // the page's ingredient lines go in whole as names: splitting "200 g liszt" into amount and name would be a guess
-  if (extracted.ingredients.length > 0) candidate.ingredients = extracted.ingredients.map((name) => ({ amount: null, name }));
+  // the quantity and unit at the start of a line go to the amount ("50 dkg" | "Csirkemell"); where that is not clear the
+  // whole line stays in the name (see ingredient.ts). Nothing is cut or changed.
+  if (extracted.ingredients.length > 0) candidate.ingredients = extracted.ingredients.map(splitIngredient);
 
   let parsed = recipeInputSchema.partial().safeParse(candidate);
   // the picture is optional (and not recipe text): if it is the ONLY thing that does not fit (a CDN address with a long
