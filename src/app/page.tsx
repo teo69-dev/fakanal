@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Header } from "@/components/Header";
+import { RecipeCard } from "@/components/RecipeCard";
 import { listRecipes, PAGE_SIZE } from "@/lib/queries";
 import { cutChars } from "@/lib/text";
 
@@ -31,17 +32,7 @@ export default async function Home({ searchParams }: Props) {
         <ul className="grid">
           {items.map((r) => (
             <li key={r.slug}>
-              <Link className="card" href={`/recept/${r.slug}`}>
-                {r.imageUrl ? <img src={r.imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer" /> : null}
-                <div className="body">
-                  <div className="title">{r.name}</div>
-                  <div className="meta">
-                    {r.category ? <span>{r.category}</span> : null}
-                    {r.totalMinutes ? <span>{r.totalMinutes} perc</span> : null}
-                    {r.servings ? <span>{r.servings} adag</span> : null}
-                  </div>
-                </div>
-              </Link>
+              <RecipeCard recipe={r} />
             </li>
           ))}
         </ul>
