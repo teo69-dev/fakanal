@@ -3,7 +3,7 @@ import { BlockedAddressError, createSafeLookup, isPublicAddress, type Resolved, 
 
 describe("isPublicAddress", () => {
   it("accepts ordinary public addresses", () => {
-    for (const ok of ["8.8.8.8", "1.1.1.1", "93.184.216.34", "172.32.0.1", "172.15.255.255", "100.63.255.255", "100.128.0.1", "2606:4700:4700::1111", "2001:4860:4860::8888", "2a00:1450:4001:81b::200e"]) {
+    for (const ok of ["8.8.8.8", "1.1.1.1", "93.184.216.34", "172.32.0.1", "172.15.255.255", "100.63.255.255", "100.128.0.1", "2606:4700:4700::1111", "2001:4860:4860::8888", "2a00:1450:4001:81b::200e", "2620:4f:8000::1", "2001:200::1"]) {
       expect(isPublicAddress(ok), ok).toBe(true);
     }
   });
@@ -52,6 +52,10 @@ describe("isPublicAddress", () => {
       "64:ff9b::7f00:1",
       "2001:db8::1",
       "2001::1", // Teredo
+      "2001:2::1", // benchmarking
+      "2001:10::1", // ORCHID
+      "2001:1ff::1", // the rest of 2001::/23 (IETF protocol assignments)
+      "2001:4:112::1", // AS112 sits inside the IETF block too: refused with it (a recipe site does not live there)
       "2002:7f00:1::1", // 6to4 embedding 127.0.0.1
       "3fff::1",
     ]) {

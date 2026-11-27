@@ -32,7 +32,7 @@ const allowedV6 = new BlockList();
 allowedV6.addSubnet("2000::", 3, "ipv6");
 const blockedV6 = new BlockList();
 for (const [net, prefix] of [
-  ["2001::", 32], // Teredo
+  ["2001::", 23], // IETF protocol assignments: Teredo, benchmarking, ORCHID
   ["2001:db8::", 32], // documentation
   ["2002::", 16], // 6to4 (embeds an IPv4 address)
   ["3fff::", 20], // documentation

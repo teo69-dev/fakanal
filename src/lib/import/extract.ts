@@ -37,11 +37,14 @@ function decodeEntities(text: string): string {
 
 /** Page text out of a JSON-LD string: line-break tags become line breaks, all other tags are dropped, entities decoded. */
 export function htmlToText(value: string): string {
+  // Every pattern below is LINEAR on hostile input: a tag body is [^<>]*, which can never run past the next "<", so
+  // the attempts started by a long run of "<" do not overlap (with [^>]* each one would scan to the end: quadratic,
+  // seconds for 128 KB). The page is under the attacker's control, so this matters.
   const withBreaks = value
     .replace(/<\s*br\s*\/?\s*>/gi, "\n")
     .replace(/<\s*\/\s*(p|div|li|ul|ol|h[1-6])\s*>/gi, "\n")
-    .replace(/<\s*li\b[^>]*>/gi, "- ");
-  return decodeEntities(withBreaks.replace(/<[^>]*>/g, ""));
+    .replace(/<\s*li\b[^<>]*>/gi, "- ");
+  return decodeEntities(withBreaks.replace(/<[^<>]*>/g, ""));
 }
 
 const line = (value: unknown): string | null => {
@@ -64,13 +67,30 @@ function parseJson(raw: string): unknown {
   }
 }
 
+const LD_JSON_TYPE = /\btype\s*=\s*["']?application\/ld\+json/i;
+
+/**
+ * The content of the JSON-LD script tags. ONE pass over the page: find an opening tag, find its closing tag from
+ * there, continue after it. (A single lazy pattern for "open tag ... close tag" is quadratic when the closing tag is
+ * missing: every opening tag would scan to the end.) Other scripts are skipped the same way, as a browser does.
+ */
 function jsonBlocks(html: string): unknown[] {
   const found: unknown[] = [];
-  const pattern = /<script\b[^>]*\btype\s*=\s*["']?application\/ld\+json["']?[^>]*>([\s\S]*?)<\/script\s*>/gi;
-  for (const match of html.matchAll(pattern)) {
-    if (found.length >= MAX_BLOCKS) break;
-    const value = parseJson((match[1] ?? "").trim());
-    if (value !== undefined) found.push(value);
+  const open = /<script\b([^<>]*)>/gi;
+  const close = /<\/script\s*>/gi;
+  let at = 0;
+  while (found.length < MAX_BLOCKS) {
+    open.lastIndex = at;
+    const start = open.exec(html);
+    if (!start) break;
+    close.lastIndex = open.lastIndex;
+    const end = close.exec(html);
+    if (!end) break; // no closing tag: nothing after this point is a complete script
+    if (LD_JSON_TYPE.test(start[1] ?? "")) {
+      const value = parseJson(html.slice(open.lastIndex, end.index).trim());
+      if (value !== undefined) found.push(value);
+    }
+    at = close.lastIndex;
   }
   return found;
 }

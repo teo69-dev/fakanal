@@ -71,8 +71,24 @@ describe("buildDraft", () => {
     expect(r.ok && r.draft.ingredients).toEqual([{ amount: "", name: "só" }]);
   });
 
-  it("refuses a source or image address that the public https rule does not accept", () => {
+  it("refuses a source address that the public https rule does not accept", () => {
     expect(buildDraft(FULL, "http://example.com/x").ok).toBe(false);
-    expect(buildDraft({ ...FULL, imageUrl: "https://127.0.0.1/a.jpg" }, SOURCE).ok).toBe(false);
+    expect(buildDraft(FULL, `https://example.com/${"a".repeat(500)}`)).toEqual({ ok: false, tooLong: ["forrás"] });
+  });
+
+  it("imports without the picture when the picture alone does not fit, and says so", () => {
+    for (const imageUrl of [`https://cdn.example.com/a.jpg?${"x=1&".repeat(150)}`, "https://127.0.0.1/a.jpg"]) {
+      const r = buildDraft({ ...FULL, imageUrl }, SOURCE);
+      expect(r.ok, imageUrl.slice(0, 40)).toBe(true);
+      expect(r.ok && r.draft.imageUrl).toBe("");
+      expect(r.ok && r.missing).toEqual(["kép (a címe túl hosszú vagy nem fogadható el)"]);
+      expect(r.ok && r.draft.name).toBe("Gulyásleves"); // everything else is kept
+    }
+  });
+
+  it("still refuses when the picture is NOT the only problem (the text fields are never dropped)", () => {
+    const r = buildDraft({ ...FULL, name: "x".repeat(200), imageUrl: `https://cdn.example.com/${"a".repeat(600)}` }, SOURCE);
+    expect(r.ok).toBe(false);
+    expect(!r.ok && [...r.tooLong].sort()).toEqual(["kép", "név"]);
   });
 });

@@ -31,7 +31,15 @@ export function buildDraft(extracted: ExtractedRecipe, sourceUrl: string): Draft
   // the page's ingredient lines go in whole as names: splitting "200 g liszt" into amount and name would be a guess
   if (extracted.ingredients.length > 0) candidate.ingredients = extracted.ingredients.map((name) => ({ amount: null, name }));
 
-  const parsed = recipeInputSchema.partial().safeParse(candidate);
+  let parsed = recipeInputSchema.partial().safeParse(candidate);
+  // the picture is optional (and not recipe text): if it is the ONLY thing that does not fit (a CDN address with a long
+  // query string is common), the recipe is imported without it and the user is told
+  let imageDropped = false;
+  if (!parsed.success && "imageUrl" in candidate && parsed.error.issues.every((i) => i.path[0] === "imageUrl")) {
+    delete candidate.imageUrl;
+    imageDropped = true;
+    parsed = recipeInputSchema.partial().safeParse(candidate);
+  }
   if (!parsed.success) {
     const fields = new Set(parsed.error.issues.map((i) => FIELD_LABELS[String(i.path[0])] ?? String(i.path[0])));
     return { ok: false, tooLong: [...fields] };
@@ -51,5 +59,6 @@ export function buildDraft(extracted: ExtractedRecipe, sourceUrl: string): Draft
   if (draft.name === "") missing.push(FIELD_LABELS.name as string);
   if (draft.ingredients.length === 0) missing.push(FIELD_LABELS.ingredients as string);
   if (draft.description === "") missing.push(FIELD_LABELS.description as string);
+  if (imageDropped) missing.push("kép (a címe túl hosszú vagy nem fogadható el)");
   return { ok: true, draft, missing };
 }

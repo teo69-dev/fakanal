@@ -1,5 +1,5 @@
 import https from "node:https";
-import { Readable } from "node:stream";
+import { pipeline, Readable } from "node:stream";
 import zlib from "node:zlib";
 import { isPublicHostname } from "@/lib/url";
 import { createSafeLookup } from "./ssrf";
@@ -64,20 +64,24 @@ const REQUEST_HEADERS = {
 };
 
 /** The real transport: https only, connecting through the safe lookup, a fresh connection per request. */
-export function httpsTransport(lookup = createSafeLookup()): Transport {
+export function httpsTransport(lookup = createSafeLookup(), requester: typeof https.request = https.request): Transport {
   return (url, { signal }) =>
     new Promise((resolve, reject) => {
-      const request = https.request(
+      const request = requester(
         { hostname: url.hostname, port: 443, path: `${url.pathname}${url.search}`, method: "GET", headers: REQUEST_HEADERS, lookup, agent: false, signal },
         (response) => {
           const headers: Record<string, string | undefined> = {};
           for (const [name, value] of Object.entries(response.headers)) headers[name] = Array.isArray(value) ? value.join(", ") : value;
           const encoding = (headers["content-encoding"] ?? "").trim().toLowerCase();
           let body: Readable = response;
-          if (encoding === "gzip" || encoding === "x-gzip") body = response.pipe(zlib.createGunzip());
-          else if (encoding === "deflate") body = response.pipe(zlib.createInflate());
-          else if (encoding === "br") body = response.pipe(zlib.createBrotliDecompress());
-          else if (encoding !== "" && encoding !== "identity") {
+          const decoder =
+            encoding === "gzip" || encoding === "x-gzip" ? zlib.createGunzip() : encoding === "deflate" ? zlib.createInflate() : encoding === "br" ? zlib.createBrotliDecompress() : null;
+          if (decoder) {
+            // pipeline, not response.pipe(): pipe() does not pass an abort or a stall of the source on to the decoder,
+            // so a compressed body that stopped halfway would keep the reader waiting past the time limit
+            pipeline(response, decoder, () => undefined);
+            body = decoder;
+          } else if (encoding !== "" && encoding !== "identity") {
             response.destroy();
             return reject(new ImportError("fetch_failed", `unsupported content-encoding ${encoding}`));
           }
@@ -184,8 +188,11 @@ export async function fetchHtml(input: string, deps: FetchDeps = {}): Promise<{ 
       return { html: decodeHtml(bytes, contentType), finalUrl: url.href };
     }
   } catch (error) {
+    // after the time limit the failure can show up as a reset connection rather than an abort: it is still the timeout
+    if (!(error instanceof ImportError) && controller.signal.aborted) throw new ImportError("timeout");
     throw asImportError(error);
   } finally {
     clearTimeout(timer);
+    controller.abort(); // close whatever is still open (a body we stopped reading, a stalled connection)
   }
 }

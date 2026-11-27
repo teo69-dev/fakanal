@@ -56,7 +56,7 @@ Három tábla jön létre: `recipe`, `ingredient`, `login_attempt`.
 
 ### Későbbi frissítések: új migráció ELŐBB, új kód UTÁNA
 
-Ha egy új verzió új migrációt hoz (a `drizzle/` mappában új `NNNN_*.sql` fájl), azt **az új kód élesítése előtt** kell lefuttatni ugyanígy (`npm run db:migrate`, vagy a fájl tartalmát a Neon SQL Editorba). A migrációk úgy készülnek, hogy a régi kód mellett is ártalmatlanok (csak új, üres oszlopot vagy táblát adnak), a fordított sorrend viszont hibát okoz: az új kód olyan oszlopot kérne, ami még nincs.
+Ha egy új verzió új migrációt hoz (a `drizzle/` mappában új `NNNN_*.sql` fájl), azt **az új kód élesítése előtt** kell lefuttatni ugyanígy (`npm run db:migrate`, vagy a fájl tartalmát a Neon SQL Editorba). A migrációk úgy készülnek, hogy a régi kód mellett is ártalmatlanok (csak új, üres oszlopot vagy táblát adnak), a fordított sorrend viszont hibát okoz: az új kód olyan oszlopot kérne, ami még nincs. Konkrétan: a `source_url` migráció nélkül élesített kód MINDEN recept-oldalon 500-at ad (az oldal a `recipe` tábla összes oszlopát olvassa), és a mentés is elbukik; csak a lista oldal működne (az csak megnevezett oszlopokat olvas).
 
 - `0001_source_url.sql`: új, üres `source_url` oszlop a `recipe` táblán (az importált recept forrás-címe). Kézzel: `ALTER TABLE "recipe" ADD COLUMN "source_url" text;`
 
