@@ -14,6 +14,8 @@ export const recipe = pgTable(
     category: text("category"),
     description: text("description").notNull(),
     imageUrl: text("image_url"),
+    // where an imported recipe came from (a public https address); null for a hand-typed one
+    sourceUrl: text("source_url"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

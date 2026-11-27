@@ -45,6 +45,7 @@ export async function POST(request: Request): Promise<Response> {
           category: input.category,
           description: input.description,
           imageUrl: input.imageUrl,
+          sourceUrl: input.sourceUrl,
         },
         input.ingredients.map((ing, position) => ({ position, amount: ing.amount, name: ing.name })),
       );

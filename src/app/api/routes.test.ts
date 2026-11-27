@@ -217,6 +217,15 @@ describe("POST /api/recipes", () => {
     expect(revalidatePath).toHaveBeenCalledWith("/");
   });
 
+  it("stores the source address of an imported recipe, and refuses an unacceptable one", async () => {
+    const ok = await createRecipe(req("/api/recipes", { body: { ...recipe, sourceUrl: "https://example.com/gulyas" }, cookie: session() }));
+    expect(ok.status).toBe(201);
+    expect(db.state.recipes[0]?.row).toMatchObject({ sourceUrl: "https://example.com/gulyas" });
+    const bad = await createRecipe(req("/api/recipes", { body: { ...recipe, sourceUrl: "https://127.0.0.1/x" }, cookie: session() }));
+    expect(bad.status).toBe(400);
+    expect(db.state.recipes).toHaveLength(1);
+  });
+
   it("answers 429 when 30 recipes were added within the hour", async () => {
     db.state.recipes = Array.from({ length: 30 }, () => ({ row: { id: crypto.randomUUID() }, ingredients: [], at: new Date() }));
     const res = await createRecipe(req("/api/recipes", { body: recipe, cookie: session() }));

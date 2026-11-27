@@ -1,15 +1,17 @@
 import { z } from "zod";
 import { cleanLine, cleanText } from "./text";
-import { isAllowedImageUrl } from "./url";
+import { isAllowedImageUrl, isAllowedPublicUrl } from "./url";
 
 export const LIMITS = {
   name: 120,
   ingredients: 60,
   amount: 40,
-  ingredientName: 120,
+  // lines like "3 large potatoes (chopped (peeled, if desired - other root vegetables are good too ...))" are normal on recipe pages
+  ingredientName: 300,
   description: 10_000,
   category: 40,
   imageUrl: 500,
+  sourceUrl: 500,
   servingsMax: 100,
   totalMinutesMax: 2880,
 } as const;
@@ -51,6 +53,19 @@ const imageUrl = z
   )
   .transform((v) => (v === "" ? null : v));
 
+// where the recipe came from: the same rule as the image address (https, public host name), shown as a link
+const sourceUrl = z
+  .string()
+  .nullish()
+  .transform((v) => (v == null ? "" : cleanLine(v)))
+  .pipe(
+    z
+      .string()
+      .max(LIMITS.sourceUrl, `legfeljebb ${LIMITS.sourceUrl} karakter`)
+      .refine((v) => v === "" || isAllowedPublicUrl(v), "csak nyilvános https:// forrás-cím lehet"),
+  )
+  .transform((v) => (v === "" ? null : v));
+
 export const recipeInputSchema = z.strictObject({
   name: line(LIMITS.name),
   servings: optionalInt(LIMITS.servingsMax),
@@ -61,6 +76,7 @@ export const recipeInputSchema = z.strictObject({
     .transform(cleanText)
     .pipe(z.string().min(1, "kötelező").max(LIMITS.description, `legfeljebb ${LIMITS.description} karakter`)),
   imageUrl,
+  sourceUrl,
   ingredients: z
     .array(
       z.strictObject({

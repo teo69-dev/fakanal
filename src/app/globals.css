@@ -227,6 +227,24 @@ button:disabled {
   margin: 8px 0;
 }
 
+.import-box {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 4px 14px 14px;
+  margin-bottom: 24px;
+}
+
+.import-row {
+  display: flex;
+  gap: 8px;
+}
+
+.import-note {
+  margin: 10px 0 0;
+  color: var(--muted);
+}
+
 .narrow {
   max-width: 420px;
 }

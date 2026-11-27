@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createFakeStore, newFakeState } from "@/test/fake-store";
-import { checkWriteLimit, confirmWrite, enterLogin, LOGIN_MAX_FAILED, LOGIN_WINDOW_MS, WRITE_MAX_PER_WINDOW } from "./ratelimit";
+import { checkWriteLimit, confirmWrite, enterImport, enterLogin, IMPORT_MAX_PER_IP, IMPORT_MAX_TOTAL, IMPORT_WINDOW_MS, LOGIN_MAX_FAILED, LOGIN_WINDOW_MS, WRITE_MAX_PER_WINDOW } from "./ratelimit";
 
 const NOW = new Date("2026-11-26T12:00:00Z");
 const ago = (ms: number) => new Date(NOW.getTime() - ms);
@@ -103,5 +103,53 @@ describe("write limit", () => {
     );
     expect(results.filter(Boolean).length).toBeLessThanOrEqual(WRITE_MAX_PER_WINDOW);
     expect(s.recipes.length).toBeLessThanOrEqual(WRITE_MAX_PER_WINDOW);
+  });
+});
+
+describe("enterImport", () => {
+  it("lets IMPORT_MAX_PER_IP imports per address through (each counts) and refuses the next with a wait time", async () => {
+    const s = fixed();
+    const store = createFakeStore(s);
+    for (let n = 1; n <= IMPORT_MAX_PER_IP; n++) expect(await enterImport(store, "h", NOW), `import ${n}`).toBeNull();
+    const refused = await enterImport(store, "h", NOW);
+    expect(refused).not.toBeNull();
+    expect(refused?.retryAfterSeconds).toBeGreaterThan(0);
+    expect(refused?.retryAfterSeconds).toBeLessThanOrEqual(IMPORT_WINDOW_MS / 1000);
+    // the refused one left no row behind, neither for the address nor for the whole site
+    expect(s.attempts.filter((a) => a.ip === "import:h")).toHaveLength(IMPORT_MAX_PER_IP);
+    expect(s.attempts.filter((a) => a.ip === "import:all")).toHaveLength(IMPORT_MAX_PER_IP);
+  });
+
+  it("limits the whole site as well, and a request refused for that reason gives back its address row", async () => {
+    const s = fixed();
+    const store = createFakeStore(s);
+    for (let n = 0; n < IMPORT_MAX_TOTAL; n++) expect(await enterImport(store, `ip${n}`, NOW)).toBeNull();
+    expect(await enterImport(store, "another", NOW)).not.toBeNull();
+    expect(s.attempts.filter((a) => a.ip === "import:another")).toHaveLength(0);
+    expect(s.attempts.filter((a) => a.ip === "import:all")).toHaveLength(IMPORT_MAX_TOTAL);
+  });
+
+  it("forgets imports older than the window", async () => {
+    const s = fixed();
+    s.attempts = Array.from({ length: 50 }, () => attempt("import:h", ago(IMPORT_WINDOW_MS + 1000)));
+    s.attempts.push(...Array.from({ length: 50 }, () => attempt("import:all", ago(IMPORT_WINDOW_MS + 1000))));
+    expect(await enterImport(createFakeStore(s), "h", NOW)).toBeNull();
+  });
+
+  it("shares nothing with the login counter of the same address", async () => {
+    const s = fixed();
+    const store = createFakeStore(s);
+    for (let n = 0; n < IMPORT_MAX_PER_IP; n++) await enterImport(store, "h", NOW);
+    expect((await enterLogin(store, "h", NOW)).allowed).toBe(true); // 10 imports did not use up the login allowance
+    for (let n = 0; n < LOGIN_MAX_FAILED; n++) await enterLogin(store, "g", NOW);
+    expect(await enterImport(store, "g", NOW)).toBeNull(); // and failed logins do not count as imports
+  });
+
+  it("holds under simultaneous imports: 40 at once from one address, at most 10 get through", async () => {
+    const s = newFakeState();
+    s.delayMs = 8;
+    const store = createFakeStore(s);
+    const results = await Promise.all(Array.from({ length: 40 }, () => enterImport(store, "h")));
+    expect(results.filter((r) => r === null).length).toBeLessThanOrEqual(IMPORT_MAX_PER_IP);
   });
 });

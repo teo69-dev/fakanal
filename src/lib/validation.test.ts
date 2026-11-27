@@ -52,12 +52,13 @@ describe("recipeInputSchema", () => {
     expect(parse({ description: "a".repeat(LIMITS.description + 1) }).success).toBe(false);
   });
 
-  it("enforces the ingredient limits (1-60 rows, amount 40, name 120)", () => {
+  it("enforces the ingredient limits (1-60 rows, amount 40, name 300)", () => {
     expect(parse({ ingredients: [] }).success).toBe(false);
     expect(parse({ ingredients: Array.from({ length: 60 }, () => ({ name: "x" })) }).success).toBe(true);
     expect(parse({ ingredients: Array.from({ length: 61 }, () => ({ name: "x" })) }).success).toBe(false);
     expect(parse({ ingredients: [{ amount: "a".repeat(41), name: "x" }] }).success).toBe(false);
-    expect(parse({ ingredients: [{ name: "a".repeat(121) }] }).success).toBe(false);
+    expect(parse({ ingredients: [{ name: "a".repeat(300) }] }).success).toBe(true);
+    expect(parse({ ingredients: [{ name: "a".repeat(301) }] }).success).toBe(false);
     expect(parse({ ingredients: [{ name: " " }] }).success).toBe(false);
   });
 
@@ -76,6 +77,15 @@ describe("recipeInputSchema", () => {
       expect(parse({ imageUrl: bad }).success, bad).toBe(false);
     }
     expect(parse({ imageUrl: "https://example.com/a.jpg?x=1" }).success).toBe(true);
+  });
+
+  it("source address: the same public https rule as the image address, blank becomes null", () => {
+    expect(parse({ sourceUrl: "https://example.com/recept/1" }).success).toBe(true);
+    expect(recipeInputSchema.parse({ ...valid, sourceUrl: "  " }).sourceUrl).toBeNull();
+    expect(recipeInputSchema.parse({ ...valid }).sourceUrl).toBeNull();
+    for (const bad of ["http://example.com/", "https://127.0.0.1/", "https://localhost/", "https://nas.local/", "javascript:alert(1)", "https://u:p@example.com/", "https://example.com/" + "a".repeat(500)]) {
+      expect(parse({ sourceUrl: bad }).success, bad).toBe(false);
+    }
   });
 
   it("rejects unknown fields (no mass assignment)", () => {

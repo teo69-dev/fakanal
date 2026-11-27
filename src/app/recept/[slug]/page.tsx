@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/Header";
 import { getRecipe } from "@/lib/queries";
+import { isAllowedPublicUrl } from "@/lib/url";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,16 @@ export default async function RecipePage({ params }: Props) {
         <h2>Elkészítés</h2>
         {/* plain text on purpose: React escapes it, there is no HTML or markdown */}
         <p className="description">{recipe.description}</p>
+
+        {/* an imported recipe names its source; the link is only made for an address that passes the public https rule */}
+        {recipe.sourceUrl && isAllowedPublicUrl(recipe.sourceUrl) ? (
+          <p className="muted">
+            Forrás:{" "}
+            <a href={recipe.sourceUrl} target="_blank" rel="noopener noreferrer nofollow">
+              {new URL(recipe.sourceUrl).hostname}
+            </a>
+          </p>
+        ) : null}
       </article>
     </div>
   );

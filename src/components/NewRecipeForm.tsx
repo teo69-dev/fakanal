@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
+import { IMPORT_MESSAGES, type ImportAnswer } from "@/lib/import/messages";
 import { LIMITS } from "@/lib/validation";
 
 type Row = { amount: string; name: string };
@@ -17,11 +18,65 @@ export function NewRecipeForm() {
   const [category, setCategory] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [description, setDescription] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
   const [rows, setRows] = useState<Row[]>([{ amount: "", name: "" }]);
   const [errors, setErrors] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
+  const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importNote, setImportNote] = useState<string | null>(null);
 
   const setRow = (i: number, patch: Partial<Row>) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+
+  const formHasContent = () =>
+    [name, servings, totalMinutes, category, imageUrl, description].some((v) => v.trim() !== "") || rows.some((r) => r.name.trim() !== "" || r.amount.trim() !== "");
+
+  // Fills the form from the draft the server read out of the page's schema.org data. Nothing is saved here.
+  async function runImport() {
+    if (importUrl.trim() === "") return;
+    if (formHasContent() && !window.confirm("Az űrlapon már van kitöltött adat. Felülírjam az importált recepttel?")) return;
+    setImportBusy(true);
+    setImportError(null);
+    setImportNote(null);
+    try {
+      const res = await fetch("/api/import", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: importUrl.trim() }),
+      });
+      if (res.status === 401) {
+        router.push("/belepes");
+        return;
+      }
+      const data = (await res.json().catch(() => null)) as (Partial<ImportAnswer> & { error?: string; fields?: string[] }) | null;
+      if (res.status === 200 && data?.recipe) {
+        const r = data.recipe;
+        setName(r.name);
+        setServings(r.servings === null ? "" : String(r.servings));
+        setTotalMinutes(r.totalMinutes === null ? "" : String(r.totalMinutes));
+        setCategory(r.category);
+        setImageUrl(r.imageUrl);
+        setSourceUrl(r.sourceUrl);
+        setDescription(r.description);
+        setRows(r.ingredients.length > 0 ? r.ingredients : [{ amount: "", name: "" }]);
+        setErrors([]);
+        const missing = data.missing ?? [];
+        setImportNote(
+          "Betöltve az oldal adataiból. Nézd át mentés előtt: a hozzávalók sorai az oldal szövegei egészben, a mennyiséget nem választottam szét." +
+            (missing.length > 0 ? ` Az oldalon nem találtam: ${missing.join(", ")}. Ezeket pótold kézzel.` : ""),
+        );
+        return;
+      }
+      const code = data?.error ?? "fetch_failed";
+      const base = IMPORT_MESSAGES[res.status === 429 ? "too_many_imports" : code] ?? IMPORT_MESSAGES.fetch_failed ?? "Az import nem sikerült.";
+      setImportError(code === "too_long" ? `${base}${(data?.fields ?? []).join(", ")}.` : base);
+    } catch {
+      setImportError("Nem sikerült elérni a szervert.");
+    } finally {
+      setImportBusy(false);
+    }
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -37,6 +92,7 @@ export function NewRecipeForm() {
           totalMinutes: toInt(totalMinutes),
           category,
           imageUrl,
+          sourceUrl,
           description,
           // fully empty rows are dropped, a half-filled one reaches the server and is reported there
           ingredients: rows.filter((r) => r.amount.trim() !== "" || r.name.trim() !== ""),
@@ -65,6 +121,39 @@ export function NewRecipeForm() {
   }
 
   return (
+    <>
+      <section className="import-box" aria-labelledby="import-title">
+        <h2 id="import-title">Import linkből</h2>
+        <p className="muted">
+          Illeszd be egy receptoldal címét: az oldal strukturált (schema.org) recept-adatát betöltöm az űrlapba. Semmi nem mentődik, amíg
+          át nem nézed és meg nem nyomod a Mentés gombot.
+        </p>
+        <div className="import-row">
+          <input
+            type="url"
+            inputMode="url"
+            aria-label="Receptoldal címe"
+            placeholder="https://"
+            value={importUrl}
+            onChange={(e) => setImportUrl(e.target.value)}
+            maxLength={2000}
+          />
+          <button type="button" onClick={runImport} disabled={importBusy || importUrl.trim() === ""}>
+            {importBusy ? "Betöltés..." : "Betöltés"}
+          </button>
+        </div>
+        {importError ? (
+          <p className="error" role="alert">
+            {importError}
+          </p>
+        ) : null}
+        {importNote ? (
+          <p className="import-note" role="status">
+            {importNote}
+          </p>
+        ) : null}
+      </section>
+
     <form onSubmit={submit}>
       <div className="field">
         <label htmlFor="name">Név</label>
@@ -91,6 +180,18 @@ export function NewRecipeForm() {
         <label htmlFor="image">Kép címe (https://…)</label>
         <input id="image" type="url" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} maxLength={LIMITS.imageUrl} placeholder="https://" />
       </div>
+
+      {sourceUrl ? (
+        <div className="field">
+          <label htmlFor="source">Forrás (az importált oldal)</label>
+          <div className="import-row">
+            <input id="source" type="url" value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} maxLength={LIMITS.sourceUrl} />
+            <button type="button" className="secondary" onClick={() => setSourceUrl("")}>
+              Törlés
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <h2>Hozzávalók</h2>
       {rows.map((row, i) => (
@@ -126,5 +227,6 @@ export function NewRecipeForm() {
         Mentés
       </button>
     </form>
+    </>
   );
 }

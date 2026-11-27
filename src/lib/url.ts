@@ -34,8 +34,8 @@ export function isPublicHostname(hostname: string): boolean {
   return !BLOCKED_SUFFIXES.includes(labels[labels.length - 1] as string);
 }
 
-/** https only, no user:password@, and a public host name (see isPublicHostname). */
-export function isAllowedImageUrl(value: string): boolean {
+/** https only, no user:password@, and a public host name (see isPublicHostname). Used for image and source addresses. */
+export function isAllowedPublicUrl(value: string): boolean {
   try {
     const u = new URL(value);
     return u.protocol === "https:" && u.username === "" && u.password === "" && isPublicHostname(u.hostname);
@@ -43,3 +43,6 @@ export function isAllowedImageUrl(value: string): boolean {
     return false;
   }
 }
+
+/** The same rule under its original name (recipe images). */
+export const isAllowedImageUrl = isAllowedPublicUrl;

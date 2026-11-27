@@ -54,9 +54,25 @@ A kapcsolati címet a Neon dashboardon találod (Connect / Connection string), v
 
 Három tábla jön létre: `recipe`, `ingredient`, `login_attempt`.
 
+### Későbbi frissítések: új migráció ELŐBB, új kód UTÁNA
+
+Ha egy új verzió új migrációt hoz (a `drizzle/` mappában új `NNNN_*.sql` fájl), azt **az új kód élesítése előtt** kell lefuttatni ugyanígy (`npm run db:migrate`, vagy a fájl tartalmát a Neon SQL Editorba). A migrációk úgy készülnek, hogy a régi kód mellett is ártalmatlanok (csak új, üres oszlopot vagy táblát adnak), a fordított sorrend viszont hibát okoz: az új kód olyan oszlopot kérne, ami még nincs.
+
+- `0001_source_url.sql`: új, üres `source_url` oszlop a `recipe` táblán (az importált recept forrás-címe). Kézzel: `ALTER TABLE "recipe" ADD COLUMN "source_url" text;`
+
 ## 5. Deploy
 
 A környezeti változók módosítása csak új deploynál lép életbe. A Vercel projektben: **Deployments**, a legutóbbi mellett **Redeploy**. Ezután minden `main`-re érkező push magától épít.
+
+## Az "Import linkből" funkció
+
+Az Új recept űrlap tetején egy cím beillesztésével az oldal strukturált (schema.org, JSON-LD) recept-adatát betölti az űrlapba. Mentés csak a Mentés gombbal, átnézés után történik. Nincs hozzá külön beállítás vagy környezeti változó.
+
+- csak belépve használható; csak nyilvános `https://` cím (alapport, IP-cím, `localhost`, belső név és `felhasználó:jelszó@` nélkül) lehet;
+- a szerver csak nyilvános címekre csatlakozik (a névfeloldás után is ellenőrizve, átirányításoknál is, legfeljebb 3 átirányítás), 8 másodperc és 5 MB a korlát, csak HTML;
+- ha az oldalon nincs strukturált recept-adat, az oldal ezt kimondja, és nem próbál kitalálni semmit; a hozzávalók sorai egészben kerülnek be (a mennyiséget nem választja szét);
+- korlát: címenként 10 import 15 percen belül, az egész oldalra 30 (a számláló az adatbázisban él);
+- az importált recept oldalán "Forrás: <hoszt>" link jelenik meg.
 
 ## Opcionális: külön Preview-adatbázis
 

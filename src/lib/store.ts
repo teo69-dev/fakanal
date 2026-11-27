@@ -12,6 +12,7 @@ export type NewRecipe = {
   category: string | null;
   description: string;
   imageUrl: string | null;
+  sourceUrl: string | null;
 };
 
 export type NewIngredient = { position: number; amount: string | null; name: string };
